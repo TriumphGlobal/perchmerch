@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  email           String?   @unique
+  emailVerified   DateTime?
+  image           String?
+  hashedPassword  String?
+  role            String    @default("user")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Stripe Connect fields
+  stripeAccountId     String?
+  stripeAccountStatus String?  @default("pending")
+
+  // Relationships
+  brands          Brand[]
+  referredUsers   User[]    @relation("ReferredUsers")
+  referrer        User?     @relation("ReferredUsers", fields: [referrerId], references: [id])
+  referrerId      String?
+  affiliates      Affiliate[]
+  orders          Order[]
+  activities      UserActivity[]
+  analytics       Analytics[]
+  payouts         Payout[]
+
+  @@index([referrerId])
+}
+
+model Brand {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  description   String?
+  tagline       String?
+  imageUrl      String?
+  shopifyId     String    @unique // Shopify collection ID
+  totalSales    Float     @default(0)
+  totalEarnings Float     @default(0) // Brand owner's 50% of sales
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  products      Product[]
+  affiliates    Affiliate[]
+  orders        Order[]
+
+  @@index([userId])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  shopifyId   String   @unique
+  title       String
+  description String?
+  price       Float
+  imageUrl    String?
+  brandId     String
+  brand       Brand    @relation(fields: [brandId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([brandId])
+}
+
+model Affiliate {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  brandId       String
+  brand         Brand    @relation(fields: [brandId], references: [id])
+  commissionRate Float   @default(0.25) // Default 25% of brand's 50%
+  totalSales    Float    @default(0)    // Total sales through this affiliate
+  totalDue      Float    @default(0)    // Amount brand owner owes affiliate
+  clickCount    Int      @default(0)
+  orders        Order[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, brandId])
+  @@index([userId])
+  @@index([brandId])
+}
+
+model Order {
+  id            String    @id @default(cuid())
+  shopifyId     String    @unique
+  brandId       String
+  brand         Brand     @relation(fields: [brandId], references: [id])
+  affiliateId   String?
+  affiliate     Affiliate? @relation(fields: [affiliateId], references: [id])
+  totalAmount   Float
+  brandEarnings Float     // 50% of total
+  affiliateDue  Float?    // Amount brand owner owes affiliate from their 50%
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([brandId])
+  @@index([affiliateId])
+}
+
+model Payout {
+  id              String    @id @default(cuid())
+  userId          String
+  amount          Float
+  status          String    @default("pending") // pending, completed, failed
+  failureReason   String?
+  stripeTransferId String   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relationships
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([stripeTransferId])
+} 
