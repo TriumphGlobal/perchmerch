@@ -25,6 +25,9 @@ export const env = createEnv({
     // Printify API
     PRINTIFY_API_KEY: z.string().min(1),
     PRINTIFY_SHOP_ID: z.string().min(1),
+
+    // Email (Resend)
+    RESEND_API_KEY: z.string().min(1),
   },
   client: {
     // App
@@ -76,5 +79,8 @@ export const env = createEnv({
     // Shopify API
     NEXT_PUBLIC_SHOPIFY_SHOP_NAME: process.env.NEXT_PUBLIC_SHOPIFY_SHOP_NAME,
     NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN: process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN,
+
+    // Email (Resend)
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
   },
 }) 

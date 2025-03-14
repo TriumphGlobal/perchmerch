@@ -68,7 +68,7 @@ npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner next-auth openai @s
 
 ## OpenAI API Setup
 
-1. Go to [OpenAI API](https://platform.openai.com/signup) and create an account
+1. Go to [OpenAI API](https://platform.openai.com/sign-up) and create an account
 2. Navigate to the API section and create a new API key
 3. Copy the API key and add it to your `.env.local` file as `OPENAI_API_KEY`
 

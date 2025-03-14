@@ -3,8 +3,8 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { cn } from "../lib/utils"
+import { Button } from "/components/ui/button"
 import { 
   ChevronLeft, 
   ChevronRight,
@@ -30,47 +30,47 @@ export function SideNav() {
   const getNavItems = () => {
     // Brand management navigation
     if (pathname.includes('/manage')) {
-      const brandSlug = pathname.split('/')[1]
+      const brandId = pathname.split('/')[1]
       return [
         {
           name: "Dashboard",
-          href: `/${brandSlug}/manage`,
+          href: `/${brandId}/manage`,
           icon: <LayoutDashboard className="h-5 w-5" />,
-          active: pathname === `/${brandSlug}/manage` || pathname === `/${brandSlug}/manage?tab=dashboard`
+          active: pathname === `/${brandId}/manage` || pathname === `/${brandId}/manage?tab=dashboard`
         },
         {
           name: "Products",
-          href: `/${brandSlug}/manage?tab=products`,
+          href: `/${brandId}/manage?tab=products`,
           icon: <ShoppingBag className="h-5 w-5" />,
           active: pathname.includes(`?tab=products`)
         },
         {
           name: "Orders",
-          href: `/${brandSlug}/manage?tab=orders`,
+          href: `/${brandId}/manage?tab=orders`,
           icon: <Package className="h-5 w-5" />,
           active: pathname.includes(`?tab=orders`)
         },
         {
           name: "Affiliate Links",
-          href: `/${brandSlug}/manage?tab=affiliates`,
+          href: `/${brandId}/manage?tab=affiliates`,
           icon: <LinkIcon className="h-5 w-5" />,
           active: pathname.includes(`?tab=affiliates`)
         },
         {
           name: "Analytics",
-          href: `/${brandSlug}/manage?tab=analytics`,
+          href: `/${brandId}/manage?tab=analytics`,
           icon: <LineChart className="h-5 w-5" />,
           active: pathname.includes(`?tab=analytics`)
         },
         {
           name: "Brand Details",
-          href: `/${brandSlug}/manage?tab=brand`,
+          href: `/${brandId}/manage?tab=brand`,
           icon: <Store className="h-5 w-5" />,
           active: pathname.includes(`?tab=brand`)
         },
         {
           name: "Settings",
-          href: `/${brandSlug}/manage?tab=settings`,
+          href: `/${brandId}/manage?tab=settings`,
           icon: <Settings className="h-5 w-5" />,
           active: pathname.includes(`?tab=settings`)
         }
@@ -133,6 +133,18 @@ export function SideNav() {
           href: "/account/purchases",
           icon: <ShoppingBag className="h-5 w-5" />,
           active: pathname === "/account/purchases"
+        },
+        {
+          name: "My Earnings",
+          href: "/account/earnings",
+          icon: <ShoppingBag className="h-5 w-5" />,
+          active: pathname === "/account/earnings"
+        },
+        {
+          name: "My Affiliate Links",
+          href: "/account/affiliate-links",
+          icon: <ShoppingBag className="h-5 w-5" />,
+          active: pathname === "/account/affiliate-links"
         },
         {
           name: "Settings",

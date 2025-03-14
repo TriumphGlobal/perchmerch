@@ -2,16 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { processImageForBrand } from "@/lib/utils"
-import { PrismaClient } from "@prisma/client"
-
-const prisma = new PrismaClient()
+import { processImageForBrand } from "../lib/utils"
+import { db } from "../lib/db"
+import { User as PrismaUser } from "@prisma/client"
 
 interface Brand {
   id: string
   name: string
   ownerId: string
-  slug: string
   description?: string
   mainImage?: string
   products?: any[]
@@ -21,42 +19,65 @@ interface Brand {
   conversionRate?: number
   createdAt?: string
   updatedAt?: string
+  isApproved?: boolean
+  featured: boolean
+  logo: string
+  banner: string
+  genres?: string[]
 }
 
-interface User {
+interface Genre {
   id: string
-  username: string
-  isAdmin: boolean
+  name: string
+  createdBy: string
+}
+
+interface User extends PrismaUser {
   ownedBrands: Brand[]
-  isSuperAdmin?: boolean
-  platformCommission?: number
-  password: string
-  email?: string
-  referralCode?: string
-  referredBy?: string
-  referralCommission?: number
-  isVerified?: boolean
-  isActive?: boolean
-  createdAt?: string
-  lastLogin?: string
-  paymentInfo?: {
-    stripeCustomerId?: string
-    paymentMethod?: string
-  }
-  marketingConsent?: boolean
-  hashedPassword: string
-  role: "user" | "admin"
+}
+
+interface FeaturedBrand {
+  id: string
+  brandId: string
+  name: string
+  position: number
+}
+
+interface PlatformReferral {
+  id: string
+  referrerId: string
+  referredUserId: string
+  status: "PENDING" | "COMPLETED"
+  earnings: number
+  createdAt: Date
+  completedAt?: Date | null
+}
+
+interface ReferralLink {
+  id: string
+  code: string
+  userId: string
+  isActive: boolean
+  totalReferrals: number
+  totalEarnings: number
+  createdAt: Date
+  updatedAt: Date
 }
 
 interface AuthContextType {
   user: User | null
-  login: (username: string, password: string) => void
+  featuredBrands: FeaturedBrand[]
+  signin: (username: string, password: string) => void
   signup: (username: string, password: string, email: string, referralCode?: string, captchaToken?: string) => Promise<void>
   logout: () => void
   isOwnerOfBrand: (brandId: string) => boolean
-  canManageBrand: (brandSlug: string) => boolean
+  canManageBrand: (brandId: string) => boolean
+  isPlatformAdmin: () => boolean
   isSuperAdmin: () => boolean
   canAccessAdminDashboard: () => boolean
+  canManagePlatform: () => boolean
+  canManageFeaturedBrands: () => boolean
+  canApproveBrands: () => boolean
   addBrand: (brand: Brand) => Promise<void>
   deleteBrand: (brandId: string) => Promise<void>
   updateBrandProducts: (brandId: string, products: any[]) => Promise<void>
@@ -64,63 +85,81 @@ interface AuthContextType {
   getCurrentUser: () => User | null
   getVisibleBrands: () => Brand[]
   getAllBrands: () => Brand[]
-  generateReferralCode: (userId: string) => string
-  getReferralStats: (userId: string) => { referrals: number, earnings: number }
+  generatePlatformReferralCode: (userId: string) => Promise<string>
+  getPlatformReferralStats: (userId: string) => Promise<{
+    totalReferrals: number
+    totalEarnings: number
+    pendingReferrals: number
+    completedReferrals: number
+  }>
   suspendUser: (userId: string) => Promise<void>
   activateUser: (userId: string) => Promise<void>
   updateUserDetails: (userId: string, details: Partial<User>) => Promise<void>
   validatePasswordStrength: (password: string) => { valid: boolean, message: string }
   verifyCaptcha: (token: string) => Promise<boolean>
-  updatePassword: (hashedPassword: string) => Promise<void>
+  updatePassword: (hashedPassword: string) => Promise<boolean>
+  promoteUserToPlatformAdmin: (userId: string) => Promise<void>
+  promoteUserToSuperAdmin: (userId: string) => Promise<void>
+  renameGenre: (genreId: string, newName: string) => Promise<void>
+  removeGenre: (genreId: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export { AuthContext }
 
-// The demo brand - owned by admin account
-const DEMO_BRAND: Brand = {
-  id: "demo-brand",
-  name: "Demo Brand",
-  ownerId: "admin",
-  slug: "demo",
-  description: "This is a demo brand to showcase the platform",
-  mainImage: "https://placehold.co/200x200.jpg",
-  products: [],
-  totalSales: 0,
-  totalRevenue: 0,
-  totalVisitors: 0,
-  conversionRate: 0,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString()
+// Remove the in-memory storage
+// const users = new Map<string, User>()
+// const allBrands = new Map<string, Brand>()
+// const existingbrandIds = new Set<string>()
+// const userReferrals = new Map<string, string[]>()
+
+// Update the getCurrentUser function to use the database
+const getCurrentUser = async (): Promise<User | null> => {
+  if (!currentUser?.email) return null;
+  
+  try {
+    const dbUser = await db.user.findUnique({
+      where: { email: currentUser.email },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isSuperAdmin: true,
+        isPlatformAdmin: true,
+        // Add other fields you need
+      }
+    });
+    
+    if (dbUser) {
+      setCurrentUser(dbUser as User);
+      return dbUser as User;
+    }
+  } catch (error) {
+    console.error('Error fetching user:', error);
+  }
+  
+  return null;
 }
 
-// Store all brands in a separate collection for persistence
-const allBrands = new Map<string, Brand>()
-allBrands.set(DEMO_BRAND.id, DEMO_BRAND)
+// Update the isPlatformAdmin function
+const isPlatformAdmin = async (): Promise<boolean> => {
+  const user = await getCurrentUser();
+  return user?.isPlatformAdmin || false;
+}
 
-// Store users and their brands in memory
-// In a real app, this would be in a database
-const users = new Map<string, User>()
+// Update the isSuperAdmin function
+const isSuperAdmin = async (): Promise<boolean> => {
+  const user = await getCurrentUser();
+  return user?.isSuperAdmin || false;
+}
 
-// Initialize admin account with demo brand
-users.set("admin", {
-  id: "admin",
-  username: "admin",
-  password: "admin",
-  isAdmin: true,
-  isSuperAdmin: true,
-  platformCommission: 50,
-  ownedBrands: [{ ...DEMO_BRAND }], // Create a fresh copy
-  hashedPassword: "admin",
-  role: "admin"
-})
-
-// Keep track of all brand slugs to prevent duplicates
-const existingBrandSlugs = new Set<string>(["demo"])
-
-// Keep track of referral relationships
-const userReferrals = new Map<string, string[]>(); // userId -> array of referred userIds
+// Update the canAccessAdminDashboard function
+const canAccessAdminDashboard = async (): Promise<boolean> => {
+  const user = await getCurrentUser();
+  return user?.isPlatformAdmin || user?.isSuperAdmin || false;
+}
 
 // Load data from localStorage or use defaults
 const loadStoredData = () => {
@@ -129,7 +168,7 @@ const loadStoredData = () => {
   try {
     const storedUsers = localStorage.getItem('perchmerch_users');
     const storedBrands = localStorage.getItem('perchmerch_brands');
-    const storedSlugs = localStorage.getItem('perchmerch_slugs');
+    const storedIds = localStorage.getItem('perchmerch_ids');
     
     if (storedUsers) {
       const parsedUsers = JSON.parse(storedUsers);
@@ -145,10 +184,10 @@ const loadStoredData = () => {
       });
     }
     
-    if (storedSlugs) {
-      const parsedSlugs = JSON.parse(storedSlugs);
-      parsedSlugs.forEach((slug: string) => {
-        existingBrandSlugs.add(slug);
+    if (storedIds) {
+      const parsedIds = JSON.parse(storedIds);
+      parsedIds.forEach((id: string) => {
+        existingbrandIds.add(id);
       });
     }
   } catch (error) {
@@ -163,11 +202,11 @@ const saveData = () => {
   try {
     const usersObj = Object.fromEntries(users);
     const brandsObj = Object.fromEntries(allBrands);
-    const slugsArray = Array.from(existingBrandSlugs);
+    const idsArray = Array.from(existingbrandIds);
     
     localStorage.setItem('perchmerch_users', JSON.stringify(usersObj));
     localStorage.setItem('perchmerch_brands', JSON.stringify(brandsObj));
-    localStorage.setItem('perchmerch_slugs', JSON.stringify(slugsArray));
+    localStorage.setItem('perchmerch_ids', JSON.stringify(idsArray));
   } catch (error) {
     console.error('Error saving data:', error);
   }
@@ -180,14 +219,50 @@ function generateUniqueReferralCode(username: string): string {
   return `${baseCode}-${randomPart}`;
 }
 
+// Log user activity
+const logUserActivity = (userId: string, type: string, details: any = {}) => {
+  // In a real app, this would be saved to the database
+  console.log(`User activity: ${userId} - ${type}`, details);
+  
+  // For now, we'll just log to console, but in a real app
+  // this would create a UserActivity record in the database
+  // with proper fields matching the schema
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [featuredBrands, setFeaturedBrands] = useState<FeaturedBrand[]>([])
   const router = useRouter()
   
-  // Load stored data on initial mount
+  // Load current user on mount
   useEffect(() => {
-    loadStoredData();
-  }, []);
+    const loadUser = async () => {
+      if (!currentUser?.email) return;
+      
+      try {
+        const dbUser = await db.user.findUnique({
+          where: { email: currentUser.email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            isSuperAdmin: true,
+            isPlatformAdmin: true,
+            // Add other fields you need
+          }
+        });
+        
+        if (dbUser) {
+          setCurrentUser(dbUser as User);
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+      }
+    };
+
+    loadUser();
+  }, [currentUser?.email]);
 
   const validateUsername = (username: string): boolean => {
     // Username must be 3-20 characters long and contain only letters, numbers, and underscores
@@ -196,49 +271,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const getCurrentUser = (): User | null => {
-    return user
+    return currentUser
   }
 
   // Function to get brands visible to the current user
   const getVisibleBrands = (): Brand[] => {
-    if (!user) return []
-    return user.ownedBrands
+    if (!currentUser) return []
+    return currentUser.ownedBrands
   }
 
   // Function to get all brands (for public viewing)
   const getAllBrands = (): Brand[] => {
-    // If user is not logged in, only return brands that should be publicly visible
-    if (!user) {
-      // Filter out the demo brand for non-logged in users
-      return Array.from(allBrands.values()).filter(brand => brand.id !== DEMO_BRAND.id);
-    }
-    
-    // For admin users, return all brands
-    if (user.isAdmin) {
-      return Array.from(allBrands.values());
-    }
-    
-    // For regular users, return their brands plus any public brands (excluding demo)
-    const publicBrands = Array.from(allBrands.values()).filter(
-      brand => brand.id !== DEMO_BRAND.id && brand.ownerId !== user.id
-    );
-    
-    return [...user.ownedBrands, ...publicBrands];
+    // TODO: Replace with actual logic to fetch brands from the database
+    return []
   }
 
-  // Ensure the admin always has the demo brand
-  const ensureAdminHasDemoBrand = (adminUser: User): User => {
-    const hasDemoBrand = adminUser.ownedBrands.some(brand => brand.id === DEMO_BRAND.id)
-    
-    if (!hasDemoBrand) {
-      console.log("Adding demo brand to admin account")
-      return {
-        ...adminUser,
-        ownedBrands: [...adminUser.ownedBrands, { ...DEMO_BRAND }]
-      }
-    }
-    
-    return adminUser
+  // Function to check if user is a super admin
+  const isSuperAdmin = () => {
+    return currentUser?.role === "superAdmin" && currentUser?.isSuperAdmin === true;
+  }
+
+  // Function to check if user is a platform admin
+  const isPlatformAdmin = () => {
+    return currentUser?.isPlatformAdmin === true;
+  }
+
+  // Function to check if user has any admin privileges
+  const isAdmin = () => {
+    return isSuperAdmin() || isPlatformAdmin();
+  }
+
+  // Function to check if user can access admin dashboard
+  const canAccessAdminDashboard = (): boolean => {
+    return !!currentUser && (currentUser.isPlatformAdmin || currentUser.isSuperAdmin);
+  }
+
+  // Function to check if user can manage platform
+  const canManagePlatform = (): boolean => {
+    return !!currentUser && (currentUser.isPlatformAdmin || currentUser.isSuperAdmin);
+  }
+
+  // Function to check if user can manage featured brands
+  const canManageFeaturedBrands = (): boolean => {
+    return !!currentUser && (currentUser.isPlatformAdmin || currentUser.isSuperAdmin);
+  }
+
+  // Function to check if user can approve brands
+  const canApproveBrands = (): boolean => {
+    return !!currentUser && (currentUser.isPlatformAdmin || currentUser.isSuperAdmin);
   }
 
   // Password strength validation
@@ -304,7 +384,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     saveData();
     
     if (user.id === user.id) {
-      setUser(updatedUser);
+      setCurrentUser(updatedUser);
     }
     
     return code;
@@ -335,13 +415,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Suspend a user
   const suspendUser = async (userId: string): Promise<void> => {
-    if (!user?.isSuperAdmin) throw new Error("Unauthorized action");
+    if (!currentUser?.isSuperAdmin) throw new Error("Unauthorized action");
     
     const userToSuspend = Array.from(users.values()).find(u => u.id === userId);
     if (!userToSuspend) throw new Error("User not found");
     
     // Cannot suspend an admin
-    if (userToSuspend.isAdmin) throw new Error("Cannot suspend an admin user");
+    if (userToSuspend.isPlatformAdmin) throw new Error("Cannot suspend a platform admin user");
     
     const updatedUser = {
       ...userToSuspend,
@@ -354,7 +434,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Activate a suspended user
   const activateUser = async (userId: string): Promise<void> => {
-    if (!user?.isSuperAdmin) throw new Error("Unauthorized action");
+    if (!currentUser?.isSuperAdmin) throw new Error("Unauthorized action");
     
     const userToActivate = Array.from(users.values()).find(u => u.id === userId);
     if (!userToActivate) throw new Error("User not found");
@@ -371,7 +451,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Update user details
   const updateUserDetails = async (userId: string, details: Partial<User>): Promise<void> => {
     // Only the user themselves or an admin can update user details
-    if (user?.id !== userId && !user?.isAdmin) {
+    if (currentUser?.id !== userId && !currentUser?.isSuperAdmin) {
       throw new Error("Unauthorized action");
     }
     
@@ -382,7 +462,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const safeDetails = { ...details };
     delete safeDetails.id;
     delete safeDetails.username;
-    delete safeDetails.isAdmin;
     delete safeDetails.isSuperAdmin;
     
     const updatedUser = {
@@ -393,193 +472,226 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     users.set(userToUpdate.username, updatedUser);
     
     // If updating the current user, update state
-    if (user?.id === userId) {
-      setUser(updatedUser);
+    if (currentUser?.id === userId) {
+      setCurrentUser(updatedUser);
     }
     
     saveData();
   };
 
-  // Enhanced signup with email, referral code, and captcha
+  // Enhanced sign-up with email, referral code, and captcha
   const signup = async (username: string, password: string, email: string, referralCode?: string, captchaToken?: string): Promise<void> => {
-    // Validate username format
-    if (!validateUsername(username)) {
-      throw new Error("Username must be 4-20 characters long and contain only letters, numbers, and underscores");
-    }
-
-    // Validate password strength
-    const passwordValidation = validatePasswordStrength(password);
-    if (!passwordValidation.valid) {
-      throw new Error(passwordValidation.message);
-    }
-
-    // Validate captcha
-    if (!captchaToken || !(await verifyCaptcha(captchaToken))) {
-      throw new Error("Captcha verification failed");
-    }
-
-    // Check for reserved usernames
-    if (username.toLowerCase() === "admin") {
-      throw new Error("Username 'admin' is reserved");
-    }
-
-    // Check for existing accounts
-    if (users.has(username)) {
-      throw new Error("Username already taken");
-    }
-
-    // Check if email is already in use
-    const emailExists = Array.from(users.values()).some(u => u.email === email);
-    if (emailExists) {
-      throw new Error("Email already in use");
-    }
-
-    // Process referral code if provided
-    let referredBy = undefined;
-    if (referralCode) {
-      const referrer = Array.from(users.values()).find(u => u.referralCode === referralCode);
-      if (referrer) {
-        referredBy = referrer.id;
-        
-        // Initialize referral tracking if needed
-        if (!userReferrals.has(referrer.id)) {
-          userReferrals.set(referrer.id, []);
+    try {
+      // Validate username
+      if (!validateUsername(username)) {
+        throw new Error("Invalid username. Username must be 3-20 characters long and contain only letters, numbers, and underscores.")
+      }
+      
+      // Check if username already exists
+      if (users.has(username)) {
+        throw new Error("Username already exists")
+      }
+      
+      // Validate password strength
+      const passwordValidation = validatePasswordStrength(password)
+      if (!passwordValidation.valid) {
+        throw new Error(passwordValidation.message)
+      }
+      
+      // Validate captcha if provided
+      if (captchaToken) {
+        const isValid = await verifyCaptcha(captchaToken)
+        if (!isValid) {
+          throw new Error("Captcha validation failed")
         }
       }
+      
+      // Process referral code if provided
+      let referrerId: string | undefined
+      if (referralCode) {
+        // Find user with this referral code
+        for (const [id, userData] of users.entries()) {
+          if (userData.referralCode === referralCode) {
+            referrerId = id
+            break
+          }
+        }
+        
+        if (!referrerId) {
+          throw new Error("Invalid referral code")
+        }
+        
+        // Add this user to the referrer's list
+        if (!userReferrals.has(referrerId)) {
+          userReferrals.set(referrerId, [])
+        }
+        userReferrals.get(referrerId)?.push(username)
+      }
+      
+      // Generate a unique referral code for this user
+      const userReferralCode = generateUniqueReferralCode(username)
+      
+      // Create new user - always as regular user (role: "user")
+      const newUser: User = {
+        id: `user-${Date.now()}`,
+        username,
+        password, // In a real app, this would be hashed
+        email,
+        isSuperAdmin: false,
+        isPlatformAdmin: false, // New users can never be platform admins
+        ownedBrands: [],
+        referralCode: userReferralCode,
+        referredBy: referrerId,
+        referralCommission: 5, // Default 5% commission for referrals
+        isVerified: false,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        lastSignIn: new Date().toISOString(),
+        marketingConsent: false,
+        hashedPassword: password, // In a real app, this would be hashed
+        role: "user", // Always set to "user", never "platform"
+        featured: false,
+        name: username.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+      }
+      
+      users.set(username, newUser)
+      
+      // Save updated data
+      saveData()
+      
+      // Log the activity
+      logUserActivity(newUser.id, "sign-up", { referredBy: referrerId })
+      
+      // Auto-sign-in the user
+      setCurrentUser(newUser)
+    } catch (error) {
+      console.error("sign-up error:", error)
+      throw error
     }
-
-    // Create a new user with no brands
-    const newUser: User = {
-      id: username,
-      username,
-      password,
-      email,
-      isAdmin: false,
-      isSuperAdmin: false,
-      ownedBrands: [], // New users start with no brands
-      referralCode: generateUniqueReferralCode(username),
-      referredBy,
-      referralCommission: 5, // Default 5% commission
-      isVerified: false, // Require email verification
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      lastLogin: new Date().toISOString(),
-      marketingConsent: false,
-      hashedPassword: password,
-      role: "user"
-    }
-    
-    users.set(username, newUser);
-    setUser(newUser);
-    
-    // Track the referral relationship
-    if (referredBy) {
-      const referrerReferrals = userReferrals.get(referredBy) || [];
-      referrerReferrals.push(newUser.id);
-      userReferrals.set(referredBy, referrerReferrals);
-    }
-    
-    saveData(); // Save after creating new user
   }
 
-  const login = (username: string, password: string) => {
-    const existingUser = users.get(username)
+  const signin = async (username: string, password: string): Promise<void> => {
+    try {
+      const existingUser = users.get(username)
 
-    if (!existingUser) {
-      throw new Error("Account not found. Please sign up first.")
-    }
+      if (!existingUser) {
+        throw new Error("Account not found. Please sign up first.")
+      }
 
-    if (existingUser.password !== password) {
-      throw new Error("Incorrect password")
-    }
+      if (existingUser.password !== password) {
+        throw new Error("Incorrect password")
+      }
 
-    // Check if user is active
-    if (existingUser.isActive === false) {
-      throw new Error("This account has been suspended. Please contact support.");
-    }
+      // Check if user is active
+      if (existingUser.isActive === false) {
+        throw new Error("This account has been suspended. Please contact support.");
+      }
 
-    // Get the latest brands owned by this user
-    const updatedOwnedBrands = existingUser.ownedBrands.map(brand => {
-      // Get the latest version of the brand from allBrands
-      const latestBrand = allBrands.get(brand.id)
-      return latestBrand || brand
-    }).filter(brand => {
-      // Filter out any brands that no longer exist in allBrands
-      return allBrands.has(brand.id)
-    })
+      // Get the latest brands owned by this user
+      const updatedOwnedBrands = existingUser.ownedBrands.map(brand => {
+        // Get the latest version of the brand from allBrands
+        const latestBrand = allBrands.get(brand.id)
+        return latestBrand || brand
+      }).filter(brand => {
+        // Filter out any brands that no longer exist in allBrands
+        return allBrands.has(brand.id)
+      })
 
-    // Update the user with the latest brands
-    let updatedUser = {
-      ...existingUser,
-      ownedBrands: updatedOwnedBrands,
-      lastLogin: new Date().toISOString()
-    } as User;
+      // Update the user with the latest brands
+      let updatedUser = {
+        ...existingUser,
+        ownedBrands: updatedOwnedBrands,
+        lastSignIn: new Date().toISOString()
+      } as User;
 
-    // Special handling for admin account
-    if (username === "admin") {
-      updatedUser = ensureAdminHasDemoBrand(updatedUser)
-    }
+      users.set(username, updatedUser)
+      setCurrentUser(updatedUser)
+      saveData() // Save after updating user
 
-    users.set(username, updatedUser)
-    setUser(updatedUser)
-    saveData() // Save after updating user
-    
-    if (username === "admin") {
-      router.push("/admin/dashboard")
-    } else {
-      router.push("/")
+      // Always redirect to landing page after sign-in
+      router.replace("/landing")
+    } catch (error) {
+      console.error("sign-in error:", error)
+      throw error
     }
   }
 
   const logout = () => {
-    setUser(null)
+    setCurrentUser(null)
     router.push("/")
   }
 
   const isOwnerOfBrand = (brandId: string): boolean => {
-    if (!user) return false
-    return user.ownedBrands.some(brand => brand.id === brandId)
+    if (!currentUser) return false
+    return currentUser.ownedBrands.some(brand => brand.id === brandId)
   }
 
-  const canManageBrand = (brandSlug: string): boolean => {
-    if (!user) return false
-    // Only admin can manage demo brand
-    if (brandSlug === "demo") return user.isAdmin
-    // Users can manage their own brands
-    return user.ownedBrands.some(brand => brand.slug === brandSlug)
-  }
+  const canManageBrand = (brandId: string): boolean => {
+    if (!currentUser) return false
 
-  const isSuperAdmin = (): boolean => {
-    return user?.isSuperAdmin ?? false
-  }
+    if (brandId === "demo") return currentUser.isSuperAdmin
 
-  const canAccessAdminDashboard = (): boolean => {
-    return user?.isSuperAdmin ?? false
+    return currentUser.ownedBrands.some(brand => brand.id === brandId)
   }
 
   const addBrand = async (brand: Brand): Promise<void> => {
-    if (!user) throw new Error("Must be logged in to create a brand")
+    if (!currentUser) throw new Error("Must be logged in to create a brand")
 
-    // Prevent using demo slug for regular brands
-    if (brand.slug === "demo") {
+    // Validate brand URL (brandId)
+    if (!brand.id || typeof brand.id !== 'string') {
+      throw new Error("Brand URL is required")
+    }
+
+    // Ensure brand URL is URL-safe
+    const urlSafeRegex = /^[a-z0-9-]+$/
+    if (!urlSafeRegex.test(brand.id)) {
+      throw new Error("Brand URL can only contain lowercase letters, numbers, and hyphens")
+    }
+
+    // Check minimum and maximum length
+    if (brand.id.length < 3 || brand.id.length > 50) {
+      throw new Error("Brand URL must be between 3 and 50 characters")
+    }
+
+    // Prevent using demo id for regular brands
+    if (brand.id === "demo") {
       throw new Error("The URL 'demo' is reserved")
     }
 
-    // Check if the slug is already taken
-    if (existingBrandSlugs.has(brand.slug)) {
+    // Check if the id is already taken
+    if (existingbrandIds.has(brand.id)) {
       throw new Error("A brand with this URL already exists")
     }
 
     // Process the brand image if it exists
     const processedImage = brand.mainImage ? processImageForBrand(brand.mainImage) : ""
 
-    // Create the new brand
+    // Handle genres
+    let brandGenres: string[] = []
+    if (brand.genres) {
+      // Limit to 3 genres
+      brandGenres = brand.genres.slice(0, 3)
+      
+      // Create new genres if they don't exist
+      brandGenres.forEach(genre => {
+        if (!allGenres.has(genre)) {
+          const newGenre: Genre = {
+            id: crypto.randomUUID(),
+            name: genre,
+            createdBy: currentUser.id
+          }
+          allGenres.set(genre, newGenre)
+        }
+      })
+    }
+
+    // Create the new brand - always set isApproved to false
     const newBrand = {
       ...brand,
-      ownerId: user.id,
-      id: brand.id || crypto.randomUUID(),
+      ownerId: currentUser.id,
+      id: brand.id,
       name: brand.name,
-      slug: brand.slug,
+      brandId: brand.id,
       description: brand.description || "",
       mainImage: processedImage,
       products: brand.products || [],
@@ -588,7 +700,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       totalVisitors: 0,
       conversionRate: 0,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      isApproved: false, // Always false initially, regardless of user role
+      featured: false,
+      genres: brandGenres
     }
 
     // Add to global brands collection
@@ -596,51 +711,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Update user's owned brands
     const updatedUser = {
-      ...user,
-      ownedBrands: [...user.ownedBrands, newBrand]
+      ...currentUser,
+      ownedBrands: [...currentUser.ownedBrands, newBrand]
     }
-    users.set(user.username, updatedUser)
-    setUser(updatedUser)
+    users.set(currentUser.username, updatedUser)
+    setCurrentUser(updatedUser)
 
-    // Add the slug to our tracking set
-    existingBrandSlugs.add(brand.slug)
+    // Add the id to our tracking set
+    existingbrandIds.add(brand.id)
     
     saveData() // Save after adding brand
+
+    // Log brand creation
+    logUserActivity(currentUser.id, "BRAND_CREATE", {
+      brandId: brand.id,
+      brandName: brand.name,
+      requiresApproval: true
+    })
   }
 
   const deleteBrand = async (brandId: string): Promise<void> => {
-    if (!user) throw new Error("Must be logged in to delete a brand")
-    
-    // Don't allow deleting the demo brand
-    if (brandId === DEMO_BRAND.id) {
-      throw new Error("Cannot delete the demo brand")
+    if (!currentUser) {
+      throw new Error("You must be logged in to delete a brand")
     }
-
-    const brandToDelete = user.ownedBrands.find(b => b.id === brandId)
-    if (!brandToDelete) {
+    
+    // Find the brand
+    const brand = allBrands.get(brandId)
+    
+    if (!brand) {
       throw new Error("Brand not found")
     }
-
-    // Remove from global brands collection
-    allBrands.delete(brandId)
-
-    // Update user's owned brands
-    const updatedUser = {
-      ...user,
-      ownedBrands: user.ownedBrands.filter(b => b.id !== brandId)
-    }
-    users.set(user.username, updatedUser)
-    setUser(updatedUser)
-
-    // Remove the slug from our tracking set
-    existingBrandSlugs.delete(brandToDelete.slug)
     
-    saveData() // Save after deleting brand
+    // Check if user owns the brand or is a platform admin
+    if (brand.ownerId !== currentUser.id && !currentUser.isPlatformAdmin) {
+      throw new Error("You don't have permission to delete this brand")
+    }
+    
+    // Remove the brand from allBrands
+    allBrands.delete(brandId)
+    
+    // Remove the brand from the user's ownedBrands
+    if (brand.ownerId === currentUser.id) {
+      const brandOwner = users.get(currentUser.username)
+      if (brandOwner) {
+        brandOwner.ownedBrands = brandOwner.ownedBrands.filter(b => b.id !== brandId)
+        users.set(currentUser.username, brandOwner)
+      }
+    }
+    
+    // Remove the id from existingbrandIds
+    existingbrandIds.delete(brandId)
+    
+    // Save updated data
+    saveData()
+    
+    // Log the activity
+    logUserActivity(currentUser.id, "BRAND_DELETE", { brandId, brandName: brand.name })
   }
 
   // Add a function to update brand products
   const updateBrandProducts = async (brandId: string, products: any[]): Promise<void> => {
-    if (!user) throw new Error("Must be logged in to update brand products")
+    if (!currentUser) throw new Error("Must be logged in to update brand products")
     
     // Find the brand in the global collection
     const brandToUpdate = allBrands.get(brandId)
@@ -658,18 +789,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     allBrands.set(brandId, updatedBrand)
     
     // Update in user's owned brands if they own this brand
-    if (user.ownedBrands.some(b => b.id === brandId)) {
-      const updatedOwnedBrands = user.ownedBrands.map(b => 
+    if (currentUser.ownedBrands.some(b => b.id === brandId)) {
+      const updatedOwnedBrands = currentUser.ownedBrands.map(b => 
         b.id === brandId ? updatedBrand : b
       )
       
       const updatedUser = {
-        ...user,
+        ...currentUser,
         ownedBrands: updatedOwnedBrands
       }
       
-      users.set(user.username, updatedUser)
-      setUser(updatedUser)
+      users.set(currentUser.username, updatedUser)
+      setCurrentUser(updatedUser)
     }
     
     saveData() // Save after updating products
@@ -677,7 +808,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Add a function to update brand details
   const updateBrandDetails = async (brandId: string, details: Partial<Brand>): Promise<void> => {
-    if (!user) throw new Error("Must be logged in to update brand details")
+    if (!currentUser) throw new Error("Must be logged in to update brand details")
     
     // Find the brand in the global collection
     const brandToUpdate = allBrands.get(brandId)
@@ -685,90 +816,457 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Brand not found")
     }
     
+    // Handle genres update
+    let updatedGenres = brandToUpdate.genres || []
+    if (details.genres) {
+      // Remove genres
+      updatedGenres = updatedGenres.filter(genre => details.genres?.includes(genre))
+      
+      // Add new genres
+      details.genres.forEach(genre => {
+        if (!updatedGenres.includes(genre)) {
+          updatedGenres.push(genre)
+          
+          // Create the genre if it doesn't exist
+          if (!allGenres.has(genre)) {
+            const newGenre: Genre = {
+              id: crypto.randomUUID(),
+              name: genre,
+              createdBy: currentUser.id
+            }
+            allGenres.set(genre, newGenre)
+          }
+        }
+      })
+      
+      // Limit to 3 genres
+      updatedGenres = updatedGenres.slice(0, 3)
+    }
+    
     // Update the brand details
     const updatedBrand = {
       ...brandToUpdate,
-      ...details
+      ...details,
+      genres: updatedGenres // Update the genres
     }
     
     // Update in global brands collection
     allBrands.set(brandId, updatedBrand)
     
     // Update in user's owned brands if they own this brand
-    if (user.ownedBrands.some(b => b.id === brandId)) {
-      const updatedOwnedBrands = user.ownedBrands.map(b => 
+    if (currentUser.ownedBrands.some(b => b.id === brandId)) {
+      const updatedOwnedBrands = currentUser.ownedBrands.map(b => 
         b.id === brandId ? updatedBrand : b
       )
       
       const updatedUser = {
-        ...user,
+        ...currentUser,
         ownedBrands: updatedOwnedBrands
       }
       
-      users.set(user.username, updatedUser)
-      setUser(updatedUser)
+      users.set(currentUser.username, updatedUser)
+      setCurrentUser(updatedUser)
     }
     
     saveData() // Save after updating brand details
   }
 
-  const updatePassword = async (hashedPassword: string) => {
-    if (!user) {
-      throw new Error("No user logged in");
+  // Update password function
+  const updatePassword = async (hashedPassword: string): Promise<boolean> => {
+    if (!currentUser) throw new Error("Must be logged in to update password");
+    
+    const currentUser = users.get(currentUser.username);
+    if (!currentUser) throw new Error("User not found");
+    
+    currentUser.hashedPassword = hashedPassword;
+    users.set(currentUser.username, currentUser);
+    setCurrentUser(currentUser);
+    
+    saveData();
+    
+    // Log the activity without using 'action' property
+    logUserActivity(currentUser.id, "PASSWORD_CHANGE", {
+      timestamp: new Date()
+    });
+    
+    return true;
+  }
+
+  // Function for super admins to promote a user to platform admin
+  const promoteUserToPlatformAdmin = async (userId: string): Promise<void> => {
+    // Check if current user is a super admin
+    if (!currentUser || !isSuperAdmin()) {
+      throw new Error("Only super admins can promote users to platform admin status")
+    }
+    
+    // Find the user to promote
+    let userToPromote: User | undefined
+    
+    for (const [_, userData] of users.entries()) {
+      if (userData.id === userId) {
+        userToPromote = userData
+        break
+      }
+    }
+    
+    if (!userToPromote) {
+      throw new Error("User not found")
+    }
+    
+    // Update the user's role and admin status
+    userToPromote.role = "platform"
+    userToPromote.isPlatformAdmin = true
+    
+    // Update in the users map
+    users.set(userToPromote.username, userToPromote)
+    
+    // Save changes
+    saveData()
+    
+    // Log the activity
+    logUserActivity(currentUser.id, "PROMOTE_TO_PLATFORM_ADMIN", { 
+      targetUserId: userId, 
+      targetUsername: userToPromote.username 
+    })
+  }
+
+  // Function for super admins to promote a user to super admin
+  const promoteUserToSuperAdmin = async (userId: string): Promise<void> => {
+    // Check if current user is a super admin
+    if (!currentUser || !isSuperAdmin()) {
+      throw new Error("Only super admins can promote users to super admin status")
+    }
+    
+    // Find the user to promote
+    let userToPromote: User | undefined
+    
+    for (const [_, userData] of users.entries()) {
+      if (userData.id === userId) {
+        userToPromote = userData
+        break
+      }
+    }
+    
+    if (!userToPromote) {
+      throw new Error("User not found")
+    }
+    
+    // Update the user's role and admin status
+    userToPromote.role = "superAdmin"
+    userToPromote.isSuperAdmin = true
+    userToPromote.isPlatformAdmin = true // Super admins automatically get platform admin privileges
+    
+    // Update in the users map
+    users.set(userToPromote.username, userToPromote)
+    
+    // Save changes
+    saveData()
+    
+    // Log the activity
+    logUserActivity(currentUser.id, "PROMOTE_TO_SUPER_ADMIN", { 
+      targetUserId: userId, 
+      targetUsername: userToPromote.username 
+    })
+  }
+
+  // Function for super admins to demote a user
+  const demoteUser = async (userId: string, newRole: "user" | "platform"): Promise<void> => {
+    // Check if current user is a super admin
+    if (!currentUser || !isSuperAdmin()) {
+      throw new Error("Only super admins can demote users")
+    }
+    
+    // Find the user to demote
+    let userToDemote: User | undefined
+    
+    for (const [_, userData] of users.entries()) {
+      if (userData.id === userId) {
+        userToDemote = userData
+        break
+      }
+    }
+    
+    if (!userToDemote) {
+      throw new Error("User not found")
     }
 
-    try {
-      // Update password in the database
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { hashedPassword }
-      });
+    // Special protection for sales@triumphglobal.net
+    if (userToDemote.email === "sales@triumphglobal.net") {
+      throw new Error("Cannot demote the primary superAdmin account")
+    }
+    
+    // Cannot demote the last super admin
+    if (userToDemote.role === "superAdmin") {
+      const superAdminCount = Array.from(users.values()).filter(u => u.role === "superAdmin").length
+      if (superAdminCount <= 1) {
+        throw new Error("Cannot demote the last super admin")
+      }
+    }
+    
+    // Update the user's role and admin status
+    userToDemote.role = newRole
+    userToDemote.isSuperAdmin = false
+    userToDemote.isPlatformAdmin = newRole === "platform"
+    
+    // Update in the users map
+    users.set(userToDemote.username, userToDemote)
+    
+    // Save changes
+    saveData()
+    
+    // Log the activity
+    logUserActivity(currentUser.id, "DEMOTE_USER", { 
+      targetUserId: userId, 
+      targetUsername: userToDemote.username,
+      newRole 
+    })
+  }
 
-      // Update local user state
-      setUser(prev => prev ? { ...prev, hashedPassword } : null);
-
-      // Log the event
-      await prisma.userActivity.create({
-        data: {
-          userId: user.id,
-          action: "PASSWORD_CHANGE",
-          timestamp: new Date()
+  // Function for platform admins and super admins to rename a genre
+  const renameGenre = async (genreId: string, newName: string): Promise<void> => {
+    // Check if current user is a platform admin or super admin
+    if (!currentUser || (!isPlatformAdmin() && !isSuperAdmin())) {
+      throw new Error("Only platform admins and super admins can rename genres")
+    }
+    
+    // Find the genre to rename
+    let genreToRename: Genre | undefined
+    
+    for (const [_, genreData] of allGenres.entries()) {
+      if (genreData.id === genreId) {
+        genreToRename = genreData
+        break
+      }
+    }
+    
+    if (!genreToRename) {
+      throw new Error("Genre not found")
+    }
+    
+    // Update the genre name
+    genreToRename.name = newName
+    
+    // Update in the allGenres map
+    allGenres.set(genreToRename.id, genreToRename)
+    
+    // Update the associated brands
+    for (const [_, brandData] of allBrands.entries()) {
+      if (brandData.genres?.includes(genreToRename.name)) {
+        const updatedGenres = brandData.genres.map(g => 
+          g === genreToRename.name ? newName : g
+        )
+        
+        const updatedBrand = {
+          ...brandData,
+          genres: updatedGenres
         }
-      });
-    } catch (error) {
-      console.error("Failed to update password:", error);
-      throw new Error("Failed to update password");
+        
+        allBrands.set(brandData.id, updatedBrand)
+      }
     }
-  };
+    
+    // Save changes
+    saveData()
+    
+    // Log the activity
+    logUserActivity(currentUser.id, "RENAME_GENRE", { 
+      genreId: genreId, 
+      oldName: genreToRename.name,
+      newName: newName
+    })
+    
+    return
+  }
+
+  // Function for platform admins and super admins to remove a genre
+  const removeGenre = async (genreId: string): Promise<void> => {
+    // Check if current user is a platform admin or super admin  
+    if (!currentUser || (!isPlatformAdmin() && !isSuperAdmin())) {
+      throw new Error("Only platform admins and super admins can remove genres")
+    }
+    
+    // Find the genre to remove
+    let genreToRemove: Genre | undefined
+    
+    for (const [_, genreData] of allGenres.entries()) {
+      if (genreData.id === genreId) {
+        genreToRemove = genreData
+        break
+      }
+    }
+    
+    if (!genreToRemove) {
+      throw new Error("Genre not found")
+    }
+    
+    // Remove from the allGenres map
+    allGenres.delete(genreToRemove.id)
+    
+    // Remove the genre from associated brands
+    for (const [_, brandData] of allBrands.entries()) {
+      if (brandData.genres?.includes(genreToRemove.name)) {
+        const updatedGenres = brandData.genres.filter(g => g !== genreToRemove.name)
+        
+        const updatedBrand = {
+          ...brandData,
+          genres: updatedGenres
+        }
+        
+        allBrands.set(brandData.id, updatedBrand)
+      }
+    }
+    
+    // Save changes
+    saveData()
+    
+    // Log the activity
+    logUserActivity(currentUser.id, "REMOVE_GENRE", { 
+      genreId: genreId, 
+      genreName: genreToRemove.name
+    })
+    
+    return
+  }
+
+  // Fetch featured brands
+  const fetchFeaturedBrands = async () => {
+    try {
+      const res = await fetch('/api/brands/featured')
+      const data = await res.json()
+      if (data.success) {
+        setFeaturedBrands(data.brands)
+      }
+    } catch (error) {
+      console.error('Error fetching featured brands:', error)
+    }
+  }
+
+  useEffect(() => {
+    fetchFeaturedBrands()
+  }, [])
+
+  // Add a function to handle auth state changes
+  useEffect(() => {
+    const handleAuthStateChange = async () => {
+      if (currentUser) {
+        // Only redirect from homepage to landing, but not during sign-up
+        const path = window.location.pathname
+        if (path === "/" && !path.includes('sign-up')) {
+          router.replace("/landing")
+        }
+      }
+    }
+
+    handleAuthStateChange()
+  }, [currentUser, router])
+
+  // Function to initialize super admin privileges
+  const initializeSuperAdmin = async () => {
+    const superAdmin: User = {
+      id: "admin",
+      username: "admin",
+      password: "admin",
+      isSuperAdmin: true,
+      isPlatformAdmin: true,
+      platformCommission: 50,
+      ownedBrands: [],
+      hashedPassword: "admin",
+      role: "superAdmin",
+      email: "sales@triumphglobal.net",
+      name: "Admin",
+      featured: false
+    }
+    
+    setCurrentUser(superAdmin)
+  }
+
+  const generatePlatformReferralCode = async (userId: string): Promise<string> => {
+    try {
+      // Generate a unique code
+      const code = generateUniqueReferralCode(userId)
+      
+      // Create a new referral link in the database
+      await db.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          INSERT INTO "ReferralLink" (id, code, "userId", "isActive", "totalReferrals", "totalEarnings", "createdAt", "updatedAt")
+          VALUES (gen_random_uuid(), ${code}, ${userId}, true, 0, 0, NOW(), NOW())
+        `
+      })
+      
+      return code
+    } catch (error) {
+      console.error("Error generating platform referral code:", error)
+      throw new Error("Failed to generate platform referral code")
+    }
+  }
+
+  const getPlatformReferralStats = async (userId: string) => {
+    try {
+      // Get all platform referrals for the user
+      const referrals = await db.$transaction(async (tx) => {
+        const result = await tx.$queryRaw<PlatformReferral[]>`
+          SELECT * FROM "PlatformReferral"
+          WHERE "referrerId" = ${userId}
+        `
+        return result
+      })
+
+      // Calculate stats
+      const totalReferrals = referrals.length
+      const totalEarnings = referrals.reduce((sum: number, ref: PlatformReferral) => sum + ref.earnings, 0)
+      const pendingReferrals = referrals.filter((ref: PlatformReferral) => ref.status === "PENDING").length
+      const completedReferrals = referrals.filter((ref: PlatformReferral) => ref.status === "COMPLETED").length
+
+      return {
+        totalReferrals,
+        totalEarnings,
+        pendingReferrals,
+        completedReferrals
+      }
+    } catch (error) {
+      console.error("Error getting platform referral stats:", error)
+      throw new Error("Failed to get platform referral stats")
+    }
+  }
+
+  const value = {
+    user: currentUser,
+    featuredBrands,
+    signin,
+    signup,
+    logout,
+    isOwnerOfBrand,
+    canManageBrand,
+    isPlatformAdmin,
+    isSuperAdmin,
+    canAccessAdminDashboard,
+    canManagePlatform,
+    canManageFeaturedBrands,
+    canApproveBrands,
+    addBrand,
+    deleteBrand,
+    updateBrandProducts,
+    updateBrandDetails,
+    getCurrentUser,
+    getVisibleBrands,
+    getAllBrands,
+    generatePlatformReferralCode,
+    getPlatformReferralStats,
+    suspendUser,
+    activateUser,
+    updateUserDetails,
+    validatePasswordStrength,
+    verifyCaptcha,
+    updatePassword,
+    promoteUserToPlatformAdmin,
+    promoteUserToSuperAdmin,
+    renameGenre,
+    removeGenre,
+    demoteUser
+  }
 
   return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        login, 
-        signup,
-        logout, 
-        isOwnerOfBrand, 
-        canManageBrand,
-        isSuperAdmin,
-        canAccessAdminDashboard,
-        addBrand,
-        deleteBrand,
-        updateBrandProducts,
-        updateBrandDetails,
-        getCurrentUser,
-        getVisibleBrands,
-        getAllBrands,
-        generateReferralCode,
-        getReferralStats,
-        suspendUser,
-        activateUser,
-        updateUserDetails,
-        validatePasswordStrength,
-        verifyCaptcha,
-        updatePassword
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/contexts/auth-context";
+import { useUser } from "@clerk/nextjs"
+import { auth } from "@clerk/nextjs"
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {

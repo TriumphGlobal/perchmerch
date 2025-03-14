@@ -4,6 +4,8 @@ import crypto from "crypto"
 import { shopifyConfig } from "@/config/shopify"
 import { handleOrderWebhook } from "@/lib/shopify"
 import { db } from "@/lib/db"
+import { prisma } from "@/lib/prisma"
+import { verifyShopifyWebhook } from "@/lib/shopify"
 
 // Verify Shopify webhook signature
 function verifyShopifyWebhook(body: string, hmac: string) {
@@ -15,68 +17,66 @@ function verifyShopifyWebhook(body: string, hmac: string) {
   return hash === hmac
 }
 
+const SHOPIFY_WEBHOOK_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET
+
 export async function POST(req: Request) {
-  const headersList = headers()
-  const hmac = headersList.get("x-shopify-hmac-sha256")
-  const topic = headersList.get("x-shopify-topic")
-  
-  if (!hmac || !topic) {
-    return new NextResponse("Missing signature or topic", { status: 401 })
-  }
-
-  const body = await req.text()
-  const isValid = verifyShopifyWebhook(body, hmac)
-
-  if (!isValid) {
-    return new NextResponse("Invalid signature", { status: 401 })
-  }
-
-  const data = JSON.parse(body)
-
   try {
-    switch (topic) {
-      case "orders/create":
-        // Process new order
-        const result = await handleOrderWebhook(data)
-        
-        // If there's an affiliate referral, create commission record
-        if (data.referral_code) {
-          const affiliate = await db.affiliate.findFirst({
-            where: { id: data.referral_code },
-          })
-
-          if (affiliate) {
-            const commission = parseFloat(data.total_price) * 0.5 // 50% commission
-            
-            await db.commission.create({
-              data: {
-                affiliateId: affiliate.id,
-                orderId: data.id,
-                amount: commission,
-              },
-            })
-
-            // Update affiliate's total earnings
-            await db.affiliate.update({
-              where: { id: affiliate.id },
-              data: {
-                totalEarnings: {
-                  increment: commission,
-                },
-              },
-            })
-          }
-        }
-        break
-
-      // Add more webhook handlers as needed
-      default:
-        console.log(`Unhandled webhook topic: ${topic}`)
+    // Verify Shopify webhook
+    const headerPayload = headers()
+    const hmac = headerPayload.get("x-shopify-hmac-sha256")
+    
+    if (!hmac || !SHOPIFY_WEBHOOK_SECRET) {
+      return new NextResponse("Unauthorized", { status: 401 })
     }
 
-    return new NextResponse("Webhook processed", { status: 200 })
+    const rawBody = await req.text()
+    const data = JSON.parse(rawBody)
+
+    // Handle order creation
+    if (headerPayload.get("x-shopify-topic") === "orders/create") {
+      const { customer } = data
+      if (!customer?.id) return new NextResponse("No customer ID", { status: 400 })
+
+      // Find any pending platform referrals for this user
+      const pendingReferral = await db.platformReferral.findFirst({
+        where: {
+          referredUserId: customer.id,
+          status: "PENDING"
+        },
+        include: {
+          referralLink: true
+        }
+      })
+
+      if (pendingReferral) {
+        const orderTotal = parseFloat(data.total_price)
+        const earnings = orderTotal * 0.05 // 5% referral commission
+
+        // Update the referral
+        await db.platformReferral.update({
+          where: { id: pendingReferral.id },
+          data: {
+            status: "COMPLETED",
+            earnings,
+            completedAt: new Date()
+          }
+        })
+
+        // Update the referral link stats
+        await db.referralLink.update({
+          where: { id: pendingReferral.referralLink.id },
+          data: {
+            totalEarnings: {
+              increment: earnings
+            }
+          }
+        })
+      }
+    }
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Webhook processing error:", error)
-    return new NextResponse("Webhook processing failed", { status: 500 })
+    console.error("[SHOPIFY_WEBHOOK_ERROR]", error)
+    return NextResponse.json({ success: false }, { status: 500 })
   }
 } 

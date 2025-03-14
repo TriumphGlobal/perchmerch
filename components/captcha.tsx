@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Button } from "@/components/ui/button"
+import { Button } from "../components/ui/button"
 import { RefreshCw } from "lucide-react"
 
 interface CaptchaProps {

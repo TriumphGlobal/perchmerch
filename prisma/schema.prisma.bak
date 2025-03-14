@@ -1,0 +1,463 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["extendedWhereUnique"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  PLATFORMADMIN
+  SUPERADMIN
+}
+
+model User {
+  id                       String    @id @default(cuid())
+  name                     String?
+  email                    String    @unique
+  clerkId                  String?   @unique
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["extendedWhereUnique"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  PLATFORMADMIN
+  SUPERADMIN
+}
+
+model User {
+  id                       String    @id @default(cuid())
+  name                     String?
+  email                    String    @unique
+  clerkId                  String?   @unique
+  role                     UserRole  @default(USER)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  brands                   Brand[]
+  platformReferralCode     String?   @unique
+  platformReferredByUserId String?
+  platformReferredUserIds  String[]
+  platformReferralEarnings Float     @default(0)
+  platformReferredBy       User?     @relation("PlatformReferrals", fields: [platformReferredByUserId], references: [id])
+  platformReferrals        User[]    @relation("PlatformReferrals")
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model User {
+  id              String   @id
+  name            String?
+  email           String   @unique
+  role            String   @default("USER") // USER, BRANDOWNER, PLATFORMADMIN, SUPERADMIN
+  isSuperAdmin    Boolean  @default(false)
+  isPlatformAdmin Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Referral System
+  platformReferredByUserId String?
+  platformReferredUserIds String[] @default([])
+  platformReferralLinks PlatformReferralLink[]
+  platformReferralEarnings Float @default(0)
+  platformReferralsGiven   PlatformReferral[] @relation("PlatformReferrer")
+  platformReferralsReceived PlatformReferral[] @relation("PlatformReferredUser")
+
+  // Other relationships
+  brands       Brand[] // Brands owned by this user
+  affiliateFor Affiliate[] // Brands this user is an affiliate for
+  orders       Order[] // Orders placed by this user
+  activities   UserActivity[] // User's activity log
+  payouts      Payout[] // User's payouts
+  analytics    Analytics[] // User's analytics
+
+  // Admin relationships
+  featuredBrands FeaturedBrand[] @relation("AdminFeaturedBrands")
+  brandApprovals BrandApproval[] @relation("AdminApprovals")
+  temporaryBans  TemporaryBan[]  @relation("AdminBans")
+
+  modifiedGenres Genre[] @relation("GenreModifiedBy")
+
+  // Admin relationships for affiliates
+  approvedAffiliates Affiliate[] @relation("AffiliateApprovals")
+  rejectedAffiliates Affiliate[] @relation("AffiliateRejections")
+  bannedAffiliates   Affiliate[] @relation("AffiliateBans")
+
+  @@index([email])
+  @@index([role])
+  @@index([platformReferredByUserId])
+}
+
+model Brand {
+  id             String    @id @default(cuid())
+  name           String
+  brandId        String    @unique
+  description    String?
+  tagline        String?
+  imageUrl       String?
+  shopifyId      String    @unique // Shopify collection ID
+  totalSales     Float     @default(0)
+  totalEarnings  Float     @default(0) // Brand owner's 50% of sales
+  isApproved     Boolean   @default(false) // Whether the brand is approved
+  isFeatured     Boolean   @default(false) // Whether the brand is featured
+  isDeleted      Boolean   @default(false) // Soft delete flag
+  isHidden       Boolean   @default(false) // Temporary hide flag
+  deletedAt      DateTime? // When the brand was deleted
+  deletedBy      String? // Who deleted the brand
+  originalUserId String? // Original owner's ID (for restoration)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Analytics fields
+  totalOrders       Int   @default(0)
+  totalClicks       Int   @default(0)
+  conversionRate    Float @default(0)
+  averageOrderValue Float @default(0)
+
+  // Relationships
+  userId           String
+  user             User              @relation(fields: [userId], references: [id])
+  products         Product[]
+  affiliates       Affiliate[]
+  orders           Order[]
+  featuredInfo     FeaturedBrand[]
+  approvalInfo     BrandApproval[]
+  temporaryBanInfo TemporaryBan[]
+  genres           BrandGenre[]
+  socialMedia      BrandSocialMedia?
+
+  commission BrandCommission?
+
+  @@index([userId])
+  @@index([brandId])
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  shopifyId   String    @unique
+  title       String
+  description String?
+  price       Float
+  imageUrl    String?
+  isHidden    Boolean   @default(false)
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+  deletedBy   String?
+  brandId     String
+  brand       Brand     @relation(fields: [brandId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Analytics fields
+  totalViews   Int   @default(0)
+  totalClicks  Int   @default(0)
+  totalSales   Int   @default(0)
+  totalRevenue Float @default(0)
+
+  // Variants relationship
+  variants ProductVariant[]
+
+  @@index([brandId])
+}
+
+model ProductVariant {
+  id        String    @id @default(cuid())
+  productId String
+  product   Product   @relation(fields: [productId], references: [id])
+  title     String
+  price     Float
+  sku       String?
+  inventory Int       @default(0)
+  isHidden  Boolean   @default(false)
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  deletedBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Analytics fields
+  totalSales   Int   @default(0)
+  totalRevenue Float @default(0)
+
+  @@index([productId])
+  @@index([sku])
+}
+
+model Affiliate {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  brandId         String
+  brand           Brand     @relation(fields: [brandId], references: [id])
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, BANNED
+  commissionRate  Float     @default(0.25) // Default 25% of brand's 50%
+  totalSales      Float     @default(0) // Total sales through this affiliate
+  totalDue        Float     @default(0) // Amount brand owner owes affiliate
+  totalPaid       Float     @default(0) // Amount already paid to affiliate
+  clickCount      Int       @default(0)
+  conversionRate  Float     @default(0) // Calculated: orders / clicks
+  lastPaidAt      DateTime?
+  approvedAt      DateTime?
+  approvedBy      String?
+  rejectedAt      DateTime?
+  rejectedBy      String?
+  rejectionReason String?
+  bannedAt        DateTime?
+  bannedBy        String?
+  banReason       String?
+  banExpiresAt    DateTime?
+  orders          Order[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relationships for admin actions
+  approvedByUser User? @relation("AffiliateApprovals", fields: [approvedBy], references: [id])
+  rejectedByUser User? @relation("AffiliateRejections", fields: [rejectedBy], references: [id])
+  bannedByUser   User? @relation("AffiliateBans", fields: [bannedBy], references: [id])
+
+  customRate     Float? // Optional override of brand/genre rate
+  currentTier    String? // Current commission tier name
+  lastTierUpdate DateTime? // When the tier was last updated
+
+  @@unique([userId, brandId])
+  @@index([userId])
+  @@index([brandId])
+  @@index([status])
+}
+
+model Order {
+  id            String     @id @default(cuid())
+  shopifyId     String     @unique
+  brandId       String
+  brand         Brand      @relation(fields: [brandId], references: [id])
+  affiliateId   String?
+  affiliate     Affiliate? @relation(fields: [affiliateId], references: [id])
+  totalAmount   Float
+  brandEarnings Float // 50% of total
+  affiliateDue  Float? // Amount brand owner owes affiliate from their 50%
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  User          User?      @relation(fields: [userId], references: [id])
+  userId        String?
+
+  @@index([brandId])
+  @@index([affiliateId])
+}
+
+model Payout {
+  id               String   @id @default(cuid())
+  userId           String
+  amount           Float
+  status           String   @default("pending") // pending, completed, failed
+  failureReason    String?
+  stripeTransferId String   @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([stripeTransferId])
+}
+
+model UserActivity {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String // e.g., 'sign-in', 'BRAND_CREATE', 'ORDER_PLACE'
+  details   Json? // Additional activity details
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Analytics {
+  id        String   @id @default(cuid())
+  type      String // e.g., 'PAGE_VIEW', 'PRODUCT_VIEW', 'CHECKOUT'
+  data      Json // Analytics data
+  userId    String? // Optional user association
+  brandId   String? // Optional brand association
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([type])
+  @@index([userId])
+  @@index([brandId])
+}
+
+// New model for managing featured brands
+model FeaturedBrand {
+  id         String   @id @default(cuid())
+  brandId    String
+  brand      Brand    @relation(fields: [brandId], references: [id])
+  startDate  DateTime @default(now())
+  endDate    DateTime
+  featuredBy String
+  admin      User     @relation("AdminFeaturedBrands", fields: [featuredBy], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([brandId])
+  @@index([featuredBy])
+}
+
+// New model for brand approval workflow
+model BrandApproval {
+  id        String   @id @default(cuid())
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id])
+  status    String // pending, approved, rejected
+  reason    String? // Reason for rejection
+  adminId   String
+  admin     User     @relation("AdminApprovals", fields: [adminId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brandId])
+  @@index([adminId])
+}
+
+model TemporaryBan {
+  id        String   @id @default(cuid())
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id])
+  reason    String
+  bannedBy  String
+  admin     User     @relation("AdminBans", fields: [bannedBy], references: [id])
+  bannedAt  DateTime @default(now())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([brandId])
+  @@index([bannedBy])
+}
+
+model Genre {
+  id                 String       @id @default(cuid())
+  name               String       @unique
+  isHidden           Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  lastModifiedAt     DateTime     @default(now())
+  lastModifiedBy     String
+  lastModifiedByUser User         @relation("GenreModifiedBy", fields: [lastModifiedBy], references: [id])
+  brands             BrandGenre[]
+
+  commission GenreCommission?
+
+  @@index([name])
+  @@index([lastModifiedBy])
+}
+
+model BrandGenre {
+  id        String   @id @default(cuid())
+  brandId   String
+  genreId   String
+  createdAt DateTime @default(now())
+  brand     Brand    @relation(fields: [brandId], references: [id])
+  genre     Genre    @relation(fields: [genreId], references: [id])
+
+  @@unique([brandId, genreId])
+  @@index([brandId])
+  @@index([genreId])
+}
+
+model BrandSocialMedia {
+  id        String   @id @default(cuid())
+  brandId   String   @unique
+  facebook  String?
+  instagram String?
+  twitter   String?
+  website   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  brand     Brand    @relation(fields: [brandId], references: [id])
+
+  @@index([brandId])
+}
+
+model BrandCommission {
+  id        String           @id @default(cuid())
+  brandId   String           @unique
+  brand     Brand            @relation(fields: [brandId], references: [id])
+  baseRate  Float            @default(0.25)
+  minRate   Float            @default(0.15)
+  maxRate   Float            @default(0.35)
+  tiers     CommissionTier[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model CommissionTier {
+  id                String          @id @default(cuid())
+  brandCommissionId String
+  brandCommission   BrandCommission @relation(fields: [brandCommissionId], references: [id])
+  name              String // e.g., "Bronze", "Silver", "Gold"
+  minSales          Float // Minimum sales amount to qualify
+  rate              Float // Commission rate for this tier
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([brandCommissionId])
+}
+
+model GenreCommission {
+  id        String   @id @default(cuid())
+  genreId   String   @unique
+  genre     Genre    @relation(fields: [genreId], references: [id])
+  baseRate  Float    @default(0.25)
+  minRate   Float    @default(0.15)
+  maxRate   Float    @default(0.35)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PlatformReferralLink {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  code      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Referrals using this link
+  referrals PlatformReferral[]
+
+  @@index([userId])
+  @@index([code])
+}
+
+model PlatformReferral {
+  id             String    @id @default(cuid())
+  referrerId     String
+  referrer       User      @relation("PlatformReferrer", fields: [referrerId], references: [id])
+  referredUserId String?
+  referredUser   User?     @relation("PlatformReferredUser", fields: [referredUserId], references: [id])
+  referralLinkId String
+  referralLink   PlatformReferralLink @relation(fields: [referralLinkId], references: [id])
+  earnings       Float     @default(0)
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([referrerId])
+  @@index([referredUserId])
+  @@index([referralLinkId])
+}

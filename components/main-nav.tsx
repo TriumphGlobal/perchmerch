@@ -2,114 +2,90 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
-import { cn } from "@/lib/utils"
-import { Store, PlusCircle, LayoutDashboard, ShoppingBag, User } from "lucide-react"
+import { cn } from "../lib/utils"
+import { Store, PlusCircle, LayoutDashboard, ShoppingBag, User, TrendingUp, Shield, Users } from "lucide-react"
+import { Button } from "/components/ui/button"
+import { useUser } from "@clerk/nextjs"
 
 export function MainNav() {
   const pathname = usePathname()
-  const { user } = useAuth()
-  
-  // Check if we're on a brand page (path starts with a slug)
-  // Now also considering /demo as a brand page
-  const isBrandPage = pathname.match(/^\/[^/]+/) && 
-                      !pathname.startsWith('/login') && !pathname.startsWith('/signup') && 
-                      !pathname.startsWith('/account') && !pathname.startsWith('/admin') && 
-                      !pathname.startsWith('/create-brand') && pathname !== '/landing'
-  
-  // If on a brand page and user is not signed in, only show the logo
-  if (isBrandPage && !user) {
-    return (
-      <nav className="flex w-full">
-        <div className="flex justify-between w-full">
-          {/* Logo */}
-          <div className="flex items-center">
-            <Link href="/" className="flex items-center">
-              <span className="font-bold text-xl">PerchMerch</span>
-            </Link>
-          </div>
-          
-          {/* Empty center */}
-          <div className="flex-1"></div>
-          
-          {/* Empty right */}
-          <div className="w-[120px]"></div>
-        </div>
-      </nav>
-    )
-  }
+  const { user } = useUser()
 
-  // Define navigation items
-  const navItems = [
-    // Show Demo Store only if not on a brand page or user is logged in
+  // Compute auth states based on user data
+  const isSignedIn = !!user
+  const isSuperAdmin = user?.publicMetadata?.role === "superAdmin"
+  const isPlatformAdmin = user?.publicMetadata?.role === "platformAdmin" || isSuperAdmin
+
+  const routes = [
     {
-      name: "Demo Store",
-      href: "/demo",
-      icon: <ShoppingBag className="h-4 w-4 mr-2" />,
-      active: pathname === "/demo",
-      show: !isBrandPage || !!user
+      href: "/explore",
+      label: "Explore Brands",
+      active: pathname === "/explore",
     },
-    // My Account for logged in users
-    {
-      name: "My Account",
-      href: "/account",
-      icon: <User className="h-4 w-4 mr-2" />,
-      active: pathname.startsWith("/account"),
-      show: !!user // Only show if logged in
-    },
-    // Create Brand for logged in users
-    {
-      name: "Create Brand",
-      href: "/create-brand",
-      icon: <PlusCircle className="h-4 w-4 mr-2" />,
-      active: pathname === "/create-brand",
-      show: !!user // Only show if logged in
-    },
-    // Admin for admin users only
-    {
-      name: "Admin",
-      href: "/admin/dashboard",
-      icon: <LayoutDashboard className="h-4 w-4 mr-2" />,
-      active: pathname.startsWith("/admin"),
-      show: user?.isAdmin // Only show for admin
-    }
+    ...(isSignedIn ? [
+      {
+        href: "/account",
+        label: "My Account",
+        active: pathname === "/account",
+      }
+    ] : []),
+    ...(isPlatformAdmin ? [
+      {
+        href: "/platform",
+        label: "Platform Moderation",
+        active: pathname === "/platform",
+      }
+    ] : []),
+    ...(isSuperAdmin ? [
+      {
+        href: "/superadmin",
+        label: "Super Administration",
+        active: pathname === "/superadmin",
+        icon: Users
+      }
+    ] : [])
   ]
-
-  // Filter items to show based on user state
-  const visibleItems = navItems.filter(item => item.show)
-
+    
   return (
-    <nav className="flex w-full">
-      <div className="flex justify-between w-full">
-        {/* Logo */}
-        <div className="flex items-center">
-          <Link href={user ? "/landing" : "/"} className="flex items-center">
-            <span className="font-bold text-xl">PerchMerch</span>
-          </Link>
-        </div>
-        
-        {/* Main navigation items - equally spaced */}
-        <div className="flex items-center justify-center flex-1 px-8">
-          <div className="flex items-center justify-between w-full max-w-2xl">
-            {visibleItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center text-sm font-medium transition-colors hover:text-primary",
-                  item.active ? "text-foreground" : "text-foreground/60"
-                )}
-              >
-                {item.icon}
-                {item.name}
-              </Link>
-            ))}
-          </div>
-        </div>
-        
-        {/* Empty space to balance the layout */}
-        <div className="w-[120px]"></div>
+    <div className="flex w-full items-center justify-between">
+      <div className="flex items-center space-x-6">
+        <Link href="/" className="flex items-center space-x-2">
+          <Store className="h-6 w-6" />
+          <span className="font-bold text-xl">PerchMerch</span>
+        </Link>
+
+        <nav className="flex items-center space-x-6">
+          {routes.map((route) => (
+            <Link
+              key={route.href}
+              href={route.href}
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-primary",
+                route.active
+                  ? "text-black dark:text-white"
+                  : "text-muted-foreground"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                {route.icon && <route.icon className="h-4 w-4" />}
+                {route.label}
+              </div>
+            </Link>
+          ))}
+        </nav>
       </div>
-    </nav>
+
+      <div className="flex items-center space-x-4">
+        <Button
+          className="text-sm flex items-center"
+          asChild
+        >
+          <Link href={isSignedIn ? "/brands/create" : "/sign-up"}>
+            <PlusCircle className="mr-1 h-4 w-4" />
+            {isSignedIn ? "Create Brand" : "Create Brand"}
+          </Link>
+        </Button>
+      </div>
+    </div>
   )
 } 

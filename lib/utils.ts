@@ -5,6 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function formatPrice(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value)
+}
+
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -91,5 +100,12 @@ export function formatDate(date: Date): string {
     month: 'long',
     day: 'numeric'
   }).format(date);
+}
+
+export function generateUniqueCode(userId: string): string {
+  const timestamp = Date.now().toString(36)
+  const randomPart = Math.random().toString(36).substring(2, 6)
+  const userPart = userId.substring(0, 4)
+  return `${userPart}${timestamp}${randomPart}`.toUpperCase()
 }
 

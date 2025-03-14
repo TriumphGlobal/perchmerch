@@ -1,109 +1,297 @@
-"use client"
-
-import { useEffect } from "react"
+import { auth } from "@clerk/nextjs/server"
+import { currentUser } from "@clerk/nextjs/server"
+import { getCurrentUser } from "../lib/auth"
+import { redirect } from "next/navigation"
+import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs"
+import { Button } from "../components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
+import { Shield, Users, Settings, Store, Database, Key, Globe, DollarSign, ShoppingBag, ArrowRight, UserPlus } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Store, ShoppingBag, Users, DollarSign } from "lucide-react"
 
-export default function Home() {
-  const { user } = useAuth()
-  const router = useRouter()
+export default async function Home() {
+  try {
+    // Get data from both sources
+    const [clerkSession, clerkUser, localUser] = await Promise.all([
+      auth(),
+      currentUser(),
+      getCurrentUser()
+    ])
 
-  // If user is signed in, redirect to landing page
-  useEffect(() => {
-    if (user) {
-      router.push("/landing")
-    }
-  }, [user, router])
-
-  // If user is signed in, don't render anything while redirecting
-  if (user) {
-    return null
-  }
-
-  // If user is not signed in, show the landing page content
-  return (
-    <div className="container mx-auto py-10">
-      <div className="flex flex-col gap-8">
-        <section className="space-y-4">
-          <h1 className="text-4xl font-bold">Welcome to PerchMerch</h1>
-          <p className="text-xl text-muted-foreground">
-            Your one-stop platform for creating and managing your merchandise stores.
-          </p>
-        </section>
-
-        <section className="mt-12">
-          <Card>
-            <CardHeader>
-              <CardTitle>Getting Started</CardTitle>
-              <CardDescription>Follow these steps to set up your merchandise store</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-muted">
-                    <span className="text-sm font-bold">1</span>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="font-medium leading-none">Create a brand</p>
-                    <p className="text-sm text-muted-foreground">
-                      Set up your brand with a name, description, and logo.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-muted">
-                    <span className="text-sm font-bold">2</span>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="font-medium leading-none">Add products</p>
-                    <p className="text-sm text-muted-foreground">
-                      Create products with descriptions, images, and pricing.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-muted">
-                    <span className="text-sm font-bold">3</span>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="font-medium leading-none">Share your store</p>
-                    <p className="text-sm text-muted-foreground">
-                      Share your store link with customers and start selling.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-muted">
-                    <span className="text-sm font-bold">4</span>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="font-medium leading-none">Create affiliate links</p>
-                    <p className="text-sm text-muted-foreground">
-                      Generate affiliate links to increase your sales through partners.
-                    </p>
-                  </div>
-                </div>
+    // Extract Clerk user data
+    const clerkData = clerkUser ? {
+      email: clerkUser.emailAddresses[0]?.emailAddress || null,
+      firstName: clerkUser.firstName,
+      role: clerkUser.publicMetadata?.role as string || 'user',
+      isSignedIn: true,
+    } : null
+    const isAdmin = localUser?.role === "superAdmin"
+    const isPlatformMod = localUser?.role === "platformAdmin" || isAdmin
+    return (
+      <div className="min-h-screen">
+        {clerkData ? (
+           <div className="min-h-screen">
+           <SignedIn>
+             <div className="container py-8 space-y-8">
+               <h1 className="text-4xl font-bold">Welcome to Your Dashboard</h1>
+               
+               {/* Account Status */}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                 {/* Clerk Account */}
+                 <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Key className="h-5 w-5" />
+                        Clerk Account
+                      </CardTitle>
+                      <CardDescription>Authentication data from Clerk</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                     <div className="space-y-4">
+                       <div>
+                         <h3 className="font-semibold">Email:</h3>
+                         <p>{clerkData?.email || 'Not available'}</p>
+                       </div>
+                       <div>
+                         <h3 className="font-semibold">Name:</h3>
+                         <p>{clerkData?.firstName || 'Not set'}</p>
+                       </div>
+                       <div>
+                         <h3 className="font-semibold">Role:</h3>
+                         <p>{clerkData?.role || 'Not set'}</p>
+                       </div>
+                     </div>
+                   </CardContent>
+                 </Card>
+     
+                 {/* Local DB Account */}
+                 <Card>
+                   <CardHeader>
+                     <CardTitle className="flex items-center gap-2">
+                       <Database className="h-5 w-5" />
+                       Local Database
+                     </CardTitle>
+                     <CardDescription>User data from local database</CardDescription>
+                   </CardHeader>
+                   <CardContent>
+                     <div className="space-y-4">
+                       <div>
+                         <h3 className="font-semibold">Email:</h3>
+                         <p>{localUser?.email || 'Not found'}</p>
+                       </div>
+                       <div>
+                         <h3 className="font-semibold">Name:</h3>
+                         <p>{localUser?.name || 'Not set'}</p>
+                       </div>
+                       <div>
+                         <h3 className="font-semibold">Role:</h3>
+                         <p>{localUser?.role || 'Not set'}</p>
+                       </div>
+                     </div>
+                   </CardContent>
+                 </Card>
+               </div>
+     
+               {/* Quick Actions */}
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {/* SuperAdmin-only Actions */}
+                 {isAdmin && (
+                   <>
+                     <Card>
+                       <CardHeader>
+                         <CardTitle className="flex items-center gap-2">
+                           <Shield className="h-5 w-5" />
+                           Platform Management
+                         </CardTitle>
+                         <CardDescription>Manage platform settings and commissions</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <Button asChild className="w-full">
+                           <Link href="/superadmin">Admin Dashboard</Link>
+                         </Button>
+                       </CardContent>
+                     </Card>
+     
+                     <Card>
+                       <CardHeader>
+                         <CardTitle className="flex items-center gap-2">
+                           <Users className="h-5 w-5" />
+                           User Management
+                         </CardTitle>
+                         <CardDescription>Manage roles, bans, and reinstatements</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <Button asChild className="w-full">
+                           <Link href="/superadmin/users">Manage Users</Link>
+                         </Button>
+                       </CardContent>
+                     </Card>
+     
+                     <Card>
+                       <CardHeader>
+                         <CardTitle className="flex items-center gap-2">
+                           <Settings className="h-5 w-5" />
+                           Content Moderation
+                         </CardTitle>
+                         <CardDescription>Remove brands and products</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <Button asChild className="w-full">
+                           <Link href="/superadmin/moderation">Moderation</Link>
+                         </Button>
+                       </CardContent>
+                     </Card>
+                   </>
+                 )}
+     
+                 {/* PlatformAdmin Actions */}
+                 {isPlatformMod && (
+                   <>
+                     <Card>
+                       <CardHeader>
+                         <CardTitle className="flex items-center gap-2">
+                           <Store className="h-5 w-5" />
+                           Brand Approvals
+                         </CardTitle>
+                         <CardDescription>Review and approve new brands</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <Button asChild className="w-full">
+                           <Link href="/admin/brands/approvals">Brand Approvals</Link>
+                         </Button>
+                       </CardContent>
+                     </Card>
+     
+                     <Card>
+                       <CardHeader>
+                         <CardTitle className="flex items-center gap-2">
+                           <Settings className="h-5 w-5" />
+                           Temporary Moderation
+                         </CardTitle>
+                         <CardDescription>Temporary content and user moderation</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <Button asChild className="w-full">
+                           <Link href="/platform/temp-moderation">Moderate</Link>
+                         </Button>
+                       </CardContent>
+                     </Card>
+                   </>
+                 )}
+     
+                 {/* Regular User Actions */}
+                 <Card>
+                   <CardHeader>
+                     <CardTitle className="flex items-center gap-2">
+                       <Store className="h-5 w-5" />
+                       Explore Brands
+                     </CardTitle>
+                     <CardDescription>Discover and shop from various brands</CardDescription>
+                   </CardHeader>
+                   <CardContent>
+                     <Button asChild className="w-full">
+                       <Link href="/brands">Browse Brands</Link>
+                     </Button>
+                   </CardContent>
+                 </Card>
+     
+                 <Card>
+                   <CardHeader>
+                     <CardTitle className="flex items-center gap-2">
+                       <Store className="h-5 w-5" />
+                       Create a Brand
+                     </CardTitle>
+                     <CardDescription>Start selling your own merchandise</CardDescription>
+                   </CardHeader>
+                   <CardContent>
+                     <Button asChild className="w-full">
+                       <Link href="/brands/create">Create Brand</Link>
+                     </Button>
+                   </CardContent>
+                 </Card>
+     
+                 <Card>
+                   <CardHeader>
+                     <CardTitle className="flex items-center gap-2">
+                       <UserPlus className="h-5 w-5" />
+                       Referral Program
+                     </CardTitle>
+                     <CardDescription>Invite others and earn commission</CardDescription>
+                   </CardHeader>
+                   <CardContent>
+                     <Button asChild className="w-full">
+                       <Link href="/platformreferrals">View Referrals</Link>
+                     </Button>
+                   </CardContent>
+                 </Card>
+               </div>
+             </div>
+           </SignedIn>
+         </div>
+        ) : (
+          <SignedOut>
+            {/* Hero Section */}
+            <section className="container mx-auto py-20 px-4 text-center">
+              <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+                Turn Your Art into Profit
+              </h1>
+              <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+                Create your own brand and merchandise store in minutes. No inventory, no risk, pure creativity.
+              </p>
+              <div className="flex gap-4 justify-center">
+                <SignInButton mode="modal">
+                  <Button size="lg" className="text-lg">
+                    Sign in to manage your account <ArrowRight className="h-5 w-5 ml-2" />
+                  </Button>
+                </SignInButton>
+                <Button size="lg" className="text-lg" asChild>
+                  <Link href="/sign-up">
+                    Start Your Brand Today <ArrowRight className="h-5 w-5 ml-2" />
+                  </Link>
+                </Button>
               </div>
-            </CardContent>
-            <div className="p-6 pt-0 flex gap-4 flex-wrap justify-center">
-              <Link href="/signup">
-                <Button>Create Account</Button>
-              </Link>
-              <Link href="/signup">
-                <Button variant="outline">Create Your First Brand</Button>
-              </Link>
-              <Link href="/login">
-                <Button variant="ghost">Sign In</Button>
-              </Link>
-            </div>
-          </Card>
-        </section>
+            </section>
+
+            {/* Public Actions */}
+            <section className="container mx-auto py-20">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+                <Card className="h-full">
+                  <div className="p-6 flex flex-col h-full">
+                    <div className="flex items-center gap-2 font-semibold text-lg mb-2">
+                      <Globe className="h-5 w-5" />
+                      Explore Brands
+                    </div>
+                    <p className="text-muted-foreground mb-4 flex-grow">
+                      Discover unique creator brands
+                    </p>
+                    <Button asChild variant="outline" className="w-full">
+                      <Link href="/explore">Browse Brands</Link>
+                    </Button>
+                  </div>
+                </Card>
+
+                <Card className="h-full">
+                  <div className="p-6 flex flex-col h-full">
+                    <div className="flex items-center gap-2 font-semibold text-lg mb-2">
+                      <Store className="h-5 w-5" />
+                      Start Selling
+                    </div>
+                    <p className="text-muted-foreground mb-4 flex-grow">
+                      Checkout quicker, create your own merchandise store, or affiliate market to start earning today!
+                    </p>
+                    <Button className="w-full" asChild>
+                      <Link href="/sign-up">Create Account</Link>
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            </section>
+          </SignedOut>
+        )}
       </div>
-    </div>
-  )
+    )
+  } catch (error) {
+    console.error("Error in Home page:", error);
+    redirect("/sign-in");
+  }
 }
 

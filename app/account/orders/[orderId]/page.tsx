@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { useAuth } from "@/contexts/auth-context"
+import { useUser } from "@clerk/nextjs"
+import { auth } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "@/components/ui/use-toast"
@@ -28,7 +29,7 @@ export default function OrderConfirmationPage({ params }: { params: { orderId: s
   
   useEffect(() => {
     if (!user) {
-      router.push("/login")
+      router.push("/sign-in")
       return
     }
     

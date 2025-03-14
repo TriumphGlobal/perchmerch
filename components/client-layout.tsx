@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { MainNav } from "@/components/main-nav"
-import { UserNav } from "@/components/user-nav"
-import { SideNav } from "@/components/side-nav"
+import { cn } from "../lib/utils"
+import { MainNav } from "./main-nav"
+import { SideNav } from "./side-nav"
 
 interface ClientLayoutProps {
   children: React.ReactNode
@@ -31,13 +30,6 @@ export function ClientLayout({ children }: ClientLayoutProps) {
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Top user bar */}
-      <header className="sticky top-0 z-40 border-b bg-background">
-        <div className="flex h-14 items-center px-4 justify-end">
-          <UserNav />
-        </div>
-      </header>
-      
       {/* Main navigation */}
       <div className="border-b">
         <div className="flex h-16 items-center px-4">
