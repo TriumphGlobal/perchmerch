@@ -1,9 +1,11 @@
 import type { ClerkRole } from "./clerkU"
 
-export type UserRole = 'user' | 'platformAdmin' | 'superAdmin'
+export type UserRole = 'user' |  'superAdmin' | 'platformAdmin'
+export type BusinessType = 'individual' | 'company'
 
 export interface DBUser {
-  email: string;         // Primary identifier, same as Clerk email
+  id: string;           // Primary key from Prisma
+  email: string;        // Primary identifier, same as Clerk email
   name: string | null;
   role: UserRole;
   
@@ -12,24 +14,26 @@ export interface DBUser {
   platformReferredEmails: string[];  // Emails of users referred by this user
   platformReferralEarnings: number;
   
-  // User's brands
-  brandIds: string[];    // Array of brandIds owned by this user
-  brands: Array<{
+  // User's brand access
+  brandAccess: Array<{
     id: string;
-    name: string;
     brandId: string;
-  }>;      // Relationship to Brand model
+    role: 'owner' | 'manager';
+    brand: {
+      id: string;
+      name: string;
+      brandId: string;
+    };
+  }>;
   
   // User's orders
-  orderIds: string[];    // Array of order IDs associated with this user
+  orderIds: string[];   // Array of order IDs
   orders: Array<{
     id: string;
-    shopifyId: string;
     totalAmount: number;
   }>;      // Relationship to Order model
   
   // User's affiliate relationships
-  affiliateLinks: string[];
   affiliateFor: Array<{
     id: string;
     brandId: string;
@@ -43,7 +47,10 @@ export interface DBUser {
   bannedBy: string | null;
   banReason: string | null;
   banExpiresAt: Date | null;
-  // New fields for Printify and payouts
+  deletedAt: Date | null;
+  lastLoginAt: Date;
+
+  // Personal Information
   firstName: string | null;
   lastName: string | null;
   phoneNumber: string | null;
@@ -53,13 +60,25 @@ export interface DBUser {
   state: string | null;
   postalCode: string | null;
   country: string | null;
-  // Payout information
+  businessName: string | null;
+  businessType: BusinessType | null;
+  
+  // Payment Information
   paypalEmail: string | null;
   stripeConnectedAccountId: string | null;
-  taxId: string | null;
-  businessName: string | null;
-  businessType: 'individual' | 'company' | null;
   dateOfBirth: Date | null;
+
+  // Additional relationships from Prisma schema
+  activities: any[];      // UserActivity[]
+  payouts: any[];        // Payout[]
+  analytics: any[];      // Analytics[]
+  referredByMe: any[];   // PlatformReferral[]
+  referredMe: any[];     // PlatformReferral[]
+  referralLinks: any[];  // PlatformReferralLink[]
+  paymentMethods: any[]; // PaymentMethod[]
+  reports: any[];        // Report[]
+  reportedItems: any[];  // Report[]
+  modifiedGenres: any[]; // Genre[]
 }
 
 interface Brand {
@@ -70,7 +89,6 @@ interface Brand {
 
 interface Order {
   id: string;
-  shopifyId: string;
   totalAmount: number;
 }
 

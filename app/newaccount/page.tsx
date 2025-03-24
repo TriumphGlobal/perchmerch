@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { toast } from "../../components/ui/use-toast"
@@ -9,26 +9,12 @@ export default function NewAccountPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isLoaded, user } = useUser()
-  const [isCreating, setIsCreating] = useState(false)
-  
-  useEffect(() => {
-    const createLocalUser = async () => {
-      // If Clerk hasn't loaded yet or we're already creating, wait
-      if (!isLoaded || isCreating) return
-      
-      // If no user is signed in, redirect to sign-up
-      if (!user) {
-        toast({
-          title: "Error",
-          description: "Please sign up first",
-          variant: "destructive",
-        })
-        router.push("/sign-up")
-        return
-      }
 
+  useEffect(() => {
+    if (!isLoaded || !user) return
+
+    const createLocalUser = async () => {
       try {
-        setIsCreating(true)
         const email = user.emailAddresses[0].emailAddress
         
         // Check if user already exists in local DB
@@ -79,7 +65,7 @@ export default function NewAccountPage() {
             : "Account created successfully!",
         })
 
-        // Always redirect to /account after successful creation
+        // Redirect to account page
         router.push("/account")
       } catch (error) {
         console.error("Error creating local user:", error)
@@ -88,33 +74,20 @@ export default function NewAccountPage() {
           description: error instanceof Error ? error.message : "Failed to create your account",
           variant: "destructive",
         })
-      } finally {
-        setIsCreating(false)
       }
     }
 
     createLocalUser()
   }, [isLoaded, user, router, searchParams])
 
-  if (!isLoaded) {
-    return (
-      <div className="container flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Loading...</h1>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="container flex items-center justify-center min-h-[60vh]">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-4">Setting up your account...</h1>
-        <p className="text-muted-foreground">
-          {isCreating 
-            ? "Please wait while we finish creating your account."
-            : "Redirecting you to your account page..."}
+    <div className="container mx-auto py-8">
+      <div className="max-w-md mx-auto text-center">
+        <h1 className="text-2xl font-bold mb-4">Creating Your Account</h1>
+        <p className="text-muted-foreground mb-4">
+          Please wait while we set up your account...
         </p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
       </div>
     </div>
   )

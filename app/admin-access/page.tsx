@@ -81,7 +81,7 @@ export default function AdminAccessPage() {
         </Alert>
         
         <Button asChild>
-          <Link href="/signin">Sign In</Link>
+          <Link href="/sign-in">Sign In</Link>
         </Button>
       </div>
     )

@@ -2,30 +2,23 @@
 
 import { useEffect, useState } from "react"
 import { useUser } from "@clerk/nextjs"
-import { auth } from "@clerk/nextjs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/use-toast"
 import { Copy, Link, TrendingUp } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
+import { Affiliate } from "@prisma/client"
 
-interface AffiliateLink {
-  id: string
-  brandId: string
-  brandName: string
-  status: string
-  commissionRate: number
-  totalSales: number
-  totalDue: number
-  totalPaid: number
-  clickCount: number
-  conversionRate: number
+interface AffiliateWithBrand extends Affiliate {
+  brand: {
+    name: string
+  }
 }
 
 export default function AffiliateLinksPage() {
   const { user, isLoaded } = useUser()
-  const [affiliateLinks, setAffiliateLinks] = useState<AffiliateLink[]>([])
+  const [affiliateLinks, setAffiliateLinks] = useState<AffiliateWithBrand[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -98,9 +91,9 @@ export default function AffiliateLinksPage() {
           {affiliateLinks.map((link) => (
             <Card key={link.id}>
               <CardHeader>
-                <CardTitle>{link.brandName}</CardTitle>
+                <CardTitle>{link.brand.name}</CardTitle>
                 <CardDescription>
-                  Commission Rate: {(link.commissionRate * 100).toFixed(1)}%
+                  Commission Rate: {(link.affiliateRate * 100).toFixed(1)}%
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -109,7 +102,7 @@ export default function AffiliateLinksPage() {
                     <div className="text-sm font-medium text-muted-foreground mb-1">
                       Total Sales
                     </div>
-                    <div className="text-2xl font-bold">{link.totalSales}</div>
+                    <div className="text-2xl font-bold">{formatPrice(link.totalSales)}</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-muted-foreground mb-1">

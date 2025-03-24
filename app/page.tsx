@@ -5,7 +5,7 @@ import { redirect } from "next/navigation"
 import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
-import { Shield, Users, Settings, Store, Database, Key, Globe, DollarSign, ShoppingBag, ArrowRight, UserPlus } from "lucide-react"
+import { Shield, Users, Settings, Store, Database, Key, Globe, DollarSign, ShoppingBag, ArrowRight, UserPlus, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 
 export default async function Home() {
@@ -100,13 +100,13 @@ export default async function Home() {
                        <CardHeader>
                          <CardTitle className="flex items-center gap-2">
                            <Shield className="h-5 w-5" />
-                           Platform Management
+                           Financial Management
                          </CardTitle>
-                         <CardDescription>Manage platform settings and commissions</CardDescription>
+                         <CardDescription>Manage platform finances and commissions</CardDescription>
                        </CardHeader>
                        <CardContent>
                          <Button asChild className="w-full">
-                           <Link href="/superadmin">Admin Dashboard</Link>
+                           <Link href="/superadmin?tab=financial">Financial Settings</Link>
                          </Button>
                        </CardContent>
                      </Card>
@@ -117,11 +117,11 @@ export default async function Home() {
                            <Users className="h-5 w-5" />
                            User Management
                          </CardTitle>
-                         <CardDescription>Manage roles, bans, and reinstatements</CardDescription>
+                         <CardDescription>Manage roles and permanent bans</CardDescription>
                        </CardHeader>
                        <CardContent>
                          <Button asChild className="w-full">
-                           <Link href="/superadmin/users">Manage Users</Link>
+                           <Link href="/superadmin?tab=users">Manage Users</Link>
                          </Button>
                        </CardContent>
                      </Card>
@@ -130,13 +130,13 @@ export default async function Home() {
                        <CardHeader>
                          <CardTitle className="flex items-center gap-2">
                            <Settings className="h-5 w-5" />
-                           Content Moderation
+                           Platform Settings
                          </CardTitle>
-                         <CardDescription>Remove brands and products</CardDescription>
+                         <CardDescription>Configure system settings and API keys</CardDescription>
                        </CardHeader>
                        <CardContent>
                          <Button asChild className="w-full">
-                           <Link href="/superadmin/moderation">Moderation</Link>
+                           <Link href="/superadmin?tab=platform">Platform Settings</Link>
                          </Button>
                        </CardContent>
                      </Card>
@@ -149,6 +149,21 @@ export default async function Home() {
                      <Card>
                        <CardHeader>
                          <CardTitle className="flex items-center gap-2">
+                           <Shield className="h-5 w-5" />
+                           Product Moderation
+                         </CardTitle>
+                         <CardDescription>Review and moderate products</CardDescription>
+                       </CardHeader>
+                       <CardContent>
+                         <Button asChild className="w-full">
+                           <Link href="/platform?tab=moderation">Product Moderation</Link>
+                         </Button>
+                       </CardContent>
+                     </Card>
+
+                     <Card>
+                       <CardHeader>
+                         <CardTitle className="flex items-center gap-2">
                            <Store className="h-5 w-5" />
                            Brand Approvals
                          </CardTitle>
@@ -156,22 +171,22 @@ export default async function Home() {
                        </CardHeader>
                        <CardContent>
                          <Button asChild className="w-full">
-                           <Link href="/admin/brands/approvals">Brand Approvals</Link>
+                           <Link href="/platform?tab=brands">Brand Approvals</Link>
                          </Button>
                        </CardContent>
                      </Card>
-     
+
                      <Card>
                        <CardHeader>
                          <CardTitle className="flex items-center gap-2">
-                           <Settings className="h-5 w-5" />
-                           Temporary Moderation
+                           <AlertTriangle className="h-5 w-5" />
+                           Reports
                          </CardTitle>
-                         <CardDescription>Temporary content and user moderation</CardDescription>
+                         <CardDescription>Handle user reports and content flags</CardDescription>
                        </CardHeader>
                        <CardContent>
                          <Button asChild className="w-full">
-                           <Link href="/platform/temp-moderation">Moderate</Link>
+                           <Link href="/platform?tab=reports">Reports</Link>
                          </Button>
                        </CardContent>
                      </Card>

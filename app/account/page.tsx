@@ -11,23 +11,43 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { toast } from "../../components/ui/use-toast"
 import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert"
+import AccountLoading from "./loading"
 
 export default function AccountPage() {
   const router = useRouter()
-  const { isLoaded, isSignedIn, localUser, clerkUser } = usePerchAuth()
+  const { isSignedIn, localUser, clerkUser, isLoaded } = usePerchAuth()
   
-  const [firstName, setFirstName] = useState(localUser?.firstName || "")
-  const [lastName, setLastName] = useState(localUser?.lastName || "")
-  const [phoneNumber, setPhoneNumber] = useState(localUser?.phoneNumber || "")
-  const [address1, setAddress1] = useState(localUser?.address1 || "")
-  const [address2, setAddress2] = useState(localUser?.address2 || "")
-  const [city, setCity] = useState(localUser?.city || "")
-  const [state, setState] = useState(localUser?.state || "")
-  const [postalCode, setPostalCode] = useState(localUser?.postalCode || "")
-  const [country, setCountry] = useState(localUser?.country || "")
-  const [businessName, setBusinessName] = useState(localUser?.businessName || "")
-  const [businessType, setBusinessType] = useState<"individual" | "company" | null>(localUser?.businessType || null)
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const [address1, setAddress1] = useState("")
+  const [address2, setAddress2] = useState("")
+  const [city, setCity] = useState("")
+  const [state, setState] = useState("")
+  const [postalCode, setPostalCode] = useState("")
+  const [country, setCountry] = useState("")
+  const [businessName, setBusinessName] = useState("")
+  const [businessType, setBusinessType] = useState<"individual" | "company" | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
+
+  // Load user data when component mounts or localUser changes
+  useEffect(() => {
+    if (localUser) {
+      setFirstName(localUser.firstName || "")
+      setLastName(localUser.lastName || "")
+      setPhoneNumber(localUser.phoneNumber || "")
+      setAddress1(localUser.address1 || "")
+      setAddress2(localUser.address2 || "")
+      setCity(localUser.city || "")
+      setState(localUser.state || "")
+      setPostalCode(localUser.postalCode || "")
+      setCountry(localUser.country || "")
+      setBusinessName(localUser.businessName || "")
+      setBusinessType(localUser.businessType as "individual" | "company" | null || null)
+      setHasLoadedInitialData(true)
+    }
+  }, [localUser])
 
   useEffect(() => {
     if (!isSignedIn && isLoaded) {
@@ -70,11 +90,6 @@ export default function AccountPage() {
         title: "Success",
         description: "Your profile has been updated",
       })
-
-      // Redirect to brands page if all required fields are filled
-      if (firstName && lastName && phoneNumber && address1 && city && state && postalCode && country) {
-        router.push("/brands")
-      }
     } catch (error) {
       toast({
         title: "Error",
@@ -86,17 +101,38 @@ export default function AccountPage() {
     }
   }
 
-  if (!isLoaded || !localUser) {
-    return <div>Loading...</div>
+  // Show loading state while waiting for auth or initial data load
+  if (!isLoaded || !hasLoadedInitialData) {
+    return <AccountLoading />
+  }
+
+  // Show error if no local user data is found
+  if (!localUser) {
+    return (
+      <div className="container max-w-2xl py-10">
+        <Card>
+          <CardContent className="py-10">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Account Setup Required</AlertTitle>
+              <AlertDescription>
+                Your account is still being set up. Please wait a moment and refresh the page.
+                If this persists, try signing out and back in.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
     <div className="container max-w-2xl py-10">
       <Card>
         <CardHeader>
-          <CardTitle>Complete Your Profile</CardTitle>
+          <CardTitle>Personal Information</CardTitle>
           <CardDescription>
-            Please provide your information to start selling merchandise
+            Provide your information for quicker checkouts and to be eligible for payouts.
           </CardDescription>
         </CardHeader>
         <CardContent>

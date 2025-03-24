@@ -1,0 +1,6 @@
+[33m6ccb589[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m HEAD@{0}: reset: moving to origin/main
+[33mc13c30d[m HEAD@{1}: commit: almost working version - miracles do happen
+[33m6ccb589[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m HEAD@{2}: commit: almost there
+[33m87e3f2f[m HEAD@{3}: commit: 2nd commit
+[33mc4f0050[m HEAD@{4}: Branch: renamed refs/heads/master to refs/heads/main
+[33mc4f0050[m HEAD@{6}: commit (initial): Initial commit

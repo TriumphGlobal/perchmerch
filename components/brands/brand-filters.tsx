@@ -1,9 +1,9 @@
 "use client"
 
-import { Card } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { cn } from "@/lib/utils"
+import { Card } from "../../components/ui/card"
+import { Label } from "../../components/ui/label"
+import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group"
+import { cn } from "../../lib/utils"
 
 interface BrandFiltersProps extends React.HTMLAttributes<HTMLDivElement> {
   genres?: string[]

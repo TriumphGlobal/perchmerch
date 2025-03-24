@@ -45,7 +45,6 @@ export function UserSynchronizer() {
             body: JSON.stringify({
               id: userId,
               email: email,
-              name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'User',
               image: user.imageUrl,
               isSuperAdmin: isSuperAdminEmail
             })

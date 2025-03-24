@@ -34,7 +34,6 @@ import {
 
 interface UserDetails {
   id: string
-  name: string | null
   email: string | null
   role: string
   isSuperAdmin: boolean
@@ -220,11 +219,6 @@ export default function AdminUserDetailsPage({ params }: { params: { userId: str
             <CardContent>
               <div className="flex flex-col lg:flex-row gap-8">
                 <div className="space-y-4 flex-1">
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground mb-1">Name</h3>
-                    <p className="text-lg font-medium">{userDetails.name || "Unnamed User"}</p>
-                  </div>
-                  
                   <div>
                     <h3 className="font-medium text-sm text-muted-foreground mb-1">Email</h3>
                     <p className="text-lg">{userDetails.email || "No email provided"}</p>

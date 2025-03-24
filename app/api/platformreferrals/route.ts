@@ -39,7 +39,6 @@ export async function GET() {
             platformReferredUser: {
               select: {
                 email: true,
-                name: true,
                 platformReferralEarnings: true,
                 createdAt: true
               }
@@ -116,7 +115,6 @@ export async function POST() {
             platformReferredUser: {
               select: {
                 email: true,
-                name: true,
                 platformReferralEarnings: true,
                 createdAt: true
               }

@@ -88,4 +88,29 @@ export async function POST(req: Request) {
     console.error('Error checking genre:', error)
     return new NextResponse("Internal error", { status: 500 })
   }
+}
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const name = searchParams.get("name")?.toLowerCase()
+
+    if (!name) {
+      return NextResponse.json({ error: "Name parameter is required" }, { status: 400 })
+    }
+
+    const genre = await db.genre.findFirst({
+      where: {
+        name: {
+          equals: name,
+          mode: 'insensitive'
+        }
+      }
+    })
+
+    return NextResponse.json({ exists: !!genre })
+  } catch (error) {
+    console.error("[GENRE_CHECK]", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 } 

@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server"
-import { db } from "../../../lib/db"
+import { db } from "../../../../lib/db"
 
 export async function POST(req: Request) {
   try {
@@ -13,25 +13,57 @@ export async function POST(req: Request) {
     if (existingUser) {
       return new Response(
         JSON.stringify({ error: "User already exists" }),
-        { 
-          status: 409,
-          headers: { "Content-Type": "application/json" }
-        }
+        { status: 400 }
       )
     }
 
-    // If platformReferralLinkId exists, get the referrer's email and referral link
     let referrerEmail = null
-    let referralLink = null
+
+    // If platformReferralLinkId is provided, validate it
     if (platformReferralLinkId) {
-      referralLink = await db.platformReferralLink.findUnique({
+      // Find the referral link and check if it's active
+      const referralLink = await db.platformReferralLink.findUnique({
         where: { code: platformReferralLinkId },
         select: { 
           id: true,
-          user: { select: { email: true } } 
+          isActive: true,
+          email: true,
+          platformReferrals: {
+            select: {
+              platformReferredEmail: true
+            }
+          }
         }
       })
-      referrerEmail = referralLink?.user?.email || null
+
+      // Check if link exists and is active
+      if (!referralLink) {
+        return new Response(
+          JSON.stringify({ error: "Invalid referral link" }),
+          { status: 400 }
+        )
+      }
+
+      if (!referralLink.isActive) {
+        return new Response(
+          JSON.stringify({ error: "This referral link is no longer active" }),
+          { status: 400 }
+        )
+      }
+
+      // Check if the link has already been used by this email
+      const existingReferral = referralLink.platformReferrals.find(
+        ref => ref.platformReferredEmail === email
+      )
+
+      if (existingReferral) {
+        return new Response(
+          JSON.stringify({ error: "This referral link has already been used by this email" }),
+          { status: 400 }
+        )
+      }
+
+      referrerEmail = referralLink.email
     }
 
     // Create user in local DB
@@ -43,32 +75,37 @@ export async function POST(req: Request) {
         platformReferredByEmail: referrerEmail,
         platformReferredEmails: [],
         platformReferralEarnings: 0,
-        brandIds: [],
         orderIds: [],
-        affiliateLinks: []
       }
     })
 
     // If there's a referrer and valid referral link, update referral data
-    if (referrerEmail && referralLink?.id) {
-      await Promise.all([
-        db.user.update({
-          where: { email: referrerEmail },
-          data: {
-            platformReferredEmails: {
-              push: email
+    if (referrerEmail && platformReferralLinkId) {
+      const referralLink = await db.platformReferralLink.findUnique({
+        where: { code: platformReferralLinkId },
+        select: { id: true }
+      })
+
+      if (referralLink) {
+        await Promise.all([
+          db.user.update({
+            where: { email: referrerEmail },
+            data: {
+              platformReferredEmails: {
+                push: email
+              }
             }
-          }
-        }),
-        db.platformReferral.create({
-          data: {
-            platformReferredByEmail: referrerEmail,
-            platformReferredEmail: email,
-            platformReferralLinkId: referralLink.id, // Use the link's ID here
-            earnings: 0
-          }
-        })
-      ])
+          }),
+          db.platformReferral.create({
+            data: {
+              platformReferredByEmail: referrerEmail,
+              platformReferredEmail: email,
+              platformReferralLinkId: referralLink.id,
+              earnings: 0
+            }
+          })
+        ])
+      }
     }
 
     return new Response(

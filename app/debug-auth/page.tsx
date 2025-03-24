@@ -1,6 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server"
-import { db } from "../lib/db"
-import { getCurrentUser } from "../../lib/auth"
+import { db } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default async function DebugAuthPage() {
@@ -29,14 +29,21 @@ export default async function DebugAuthPage() {
   }
 
   // 2. Get local DB user
-  const dbUserDirect = clerkData.userEmail ? await db.user.findUnique({
-    where: { email: clerkData.userEmail },
-    select: {
-      email: true,
-      role: true,
-      createdAt: true
+  let dbUserDirect = null
+  if (clerkData.userEmail) {
+    try {
+      dbUserDirect = await db.user.findUnique({
+        where: { email: clerkData.userEmail },
+        select: {
+          email: true,
+          role: true,
+          createdAt: true
+        }
+      })
+    } catch (error) {
+      console.error('Error fetching user from database:', error)
     }
-  }) : null
+  }
 
   // 3. Get user through getCurrentUser
   const currentUserData = await getCurrentUser()

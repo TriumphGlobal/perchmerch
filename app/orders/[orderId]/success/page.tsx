@@ -7,41 +7,35 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Gift, ShoppingBag, ArrowRight } from "lucide-react"
+import { Order as PrismaOrder, Product } from "@prisma/client"
 
-interface OrderDetails {
-  id: string
-  status: string
-  totalAmount: number
-  createdAt: string
-  printifyOrderId: string
-  isGift: boolean
-  giftMessage?: string
+interface OrderWithDetails extends PrismaOrder {
   shippingAddress: {
-    firstName: string
-    lastName: string
-    email: string
-    phone: string
-    address1: string
-    address2?: string
-    city: string
-    state: string
-    zip: string
-    country: string
-  }
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    address1: string;
+    address2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
   items: {
-    quantity: number
-    product: {
-      id: string
-      name: string
-      description: string
-      price: number
-      images: string[]
-    }
-  }[]
+    quantity: number;
+    product: Product & {
+      images: string[];
+    };
+  }[];
+  metadata?: {
+    isGift?: boolean;
+    giftMessage?: string;
+  };
 }
 
 export default function OrderSuccessPage({ params }: { params: { orderId: string } }) {
-  const [order, setOrder] = useState<OrderDetails | null>(null)
+  const [order, setOrder] = useState<OrderWithDetails | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -101,15 +95,15 @@ export default function OrderSuccessPage({ params }: { params: { orderId: string
           </p>
         </div>
 
-        {order.isGift && (
+        {order.metadata?.isGift && (
           <Card className="p-6 mb-8 bg-primary/5">
             <div className="flex items-start gap-4">
               <Gift className="h-5 w-5 text-primary mt-1" />
               <div>
                 <h3 className="font-semibold mb-2">This is a Gift Order</h3>
-                {order.giftMessage && (
+                {order.metadata.giftMessage && (
                   <div className="bg-background p-4 rounded-lg">
-                    <p className="text-sm italic">"{order.giftMessage}"</p>
+                    <p className="text-sm italic">"{order.metadata.giftMessage}"</p>
                   </div>
                 )}
               </div>
@@ -159,7 +153,7 @@ export default function OrderSuccessPage({ params }: { params: { orderId: string
               {order.shippingAddress.firstName} {order.shippingAddress.lastName}<br />
               {order.shippingAddress.address1}<br />
               {order.shippingAddress.address2 && <>{order.shippingAddress.address2}<br /></>}
-              {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}<br />
+              {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}<br />
               {order.shippingAddress.country}
             </p>
           </div>

@@ -49,11 +49,12 @@ export async function POST(
       where: { id: brand.id },
       data: {
         isApproved: action === "approve",
+        isHidden: action !== "approve",
         approvalInfo: {
           create: {
             status: action === "approve" ? "approved" : "rejected",
             reason: action === "reject" ? reason : null,
-            adminId: userId
+            adminEmail: userId
           }
         }
       }

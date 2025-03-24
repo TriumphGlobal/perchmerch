@@ -1,15 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
+import { cn } from "../../lib/utils"
 
 interface Brand {
-  id: string
-  name: string
-  description?: string
-  imageUrl?: string
-  brandId: string
+  id: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  brandId: string;
+  genres?: string[];
 }
 
 interface BrandGridProps {

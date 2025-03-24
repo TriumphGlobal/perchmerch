@@ -1,19 +1,30 @@
-import { auth } from "@clerk/nextjs/server"
-import { db } from "@/lib/db"
+import { auth, currentUser } from "@clerk/nextjs/server"
+import { db } from "../../../lib/db"
 
 export async function PUT(req: Request) {
   try {
-    const session = await auth()
-    if (!session || !session.userId) {
+    // Get both session and current user to ensure we have the email
+    const [session, user] = await Promise.all([
+      auth(),
+      currentUser()
+    ])
+
+    if (!session || !user) {
       return new Response("Unauthorized", { status: 401 })
     }
 
+    const email = user.emailAddresses[0]?.emailAddress
+    if (!email) {
+      return new Response("No email found", { status: 400 })
+    }
+
     const data = await req.json()
+    console.log("Updating user:", email, "with data:", data)
     
     // Update user in local DB
     const updatedUser = await db.user.update({
       where: {
-        email: session.user?.emailAddresses[0]?.emailAddress
+        email: email
       },
       data: {
         firstName: data.firstName,
@@ -31,6 +42,8 @@ export async function PUT(req: Request) {
       }
     })
 
+    console.log("User updated successfully:", updatedUser)
+
     return new Response(JSON.stringify(updatedUser), {
       status: 200,
       headers: {
@@ -40,7 +53,10 @@ export async function PUT(req: Request) {
   } catch (error) {
     console.error("Error updating user:", error)
     return new Response(
-      JSON.stringify({ error: "Failed to update user" }), 
+      JSON.stringify({ 
+        error: "Failed to update user",
+        details: error instanceof Error ? error.message : "Unknown error"
+      }), 
       { 
         status: 500,
         headers: {

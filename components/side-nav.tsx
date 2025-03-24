@@ -34,43 +34,43 @@ export function SideNav() {
       return [
         {
           name: "Dashboard",
-          href: `/${brandId}/manage`,
+          href: `/brands/manage`,
           icon: <LayoutDashboard className="h-5 w-5" />,
-          active: pathname === `/${brandId}/manage` || pathname === `/${brandId}/manage?tab=dashboard`
+          active: pathname === `/manage/${brandId}/` || pathname === `/manage/${brandId}/?tab=dashboard`
         },
         {
           name: "Products",
-          href: `/${brandId}/manage?tab=products`,
+          href: `/manage/${brandId}/?tab=products`,
           icon: <ShoppingBag className="h-5 w-5" />,
           active: pathname.includes(`?tab=products`)
         },
         {
           name: "Orders",
-          href: `/${brandId}/manage?tab=orders`,
+          href: `/manage/${brandId}/?tab=orders`,
           icon: <Package className="h-5 w-5" />,
           active: pathname.includes(`?tab=orders`)
         },
         {
           name: "Affiliate Links",
-          href: `/${brandId}/manage?tab=affiliates`,
+          href: `/manage/${brandId}/?tab=affiliates`,
           icon: <LinkIcon className="h-5 w-5" />,
           active: pathname.includes(`?tab=affiliates`)
         },
         {
           name: "Analytics",
-          href: `/${brandId}/manage?tab=analytics`,
+          href: `/manage/${brandId}/?tab=analytics`,
           icon: <LineChart className="h-5 w-5" />,
           active: pathname.includes(`?tab=analytics`)
         },
         {
           name: "Brand Details",
-          href: `/${brandId}/manage?tab=brand`,
+          href: `/manage/${brandId}/?tab=brand`,
           icon: <Store className="h-5 w-5" />,
           active: pathname.includes(`?tab=brand`)
         },
         {
           name: "Settings",
-          href: `/${brandId}/manage?tab=settings`,
+          href: `/manage/${brandId}/?tab=settings`,
           icon: <Settings className="h-5 w-5" />,
           active: pathname.includes(`?tab=settings`)
         }
@@ -133,6 +133,12 @@ export function SideNav() {
           href: "/account/purchases",
           icon: <ShoppingBag className="h-5 w-5" />,
           active: pathname === "/account/purchases"
+        },
+        {
+          name: "My Payment Methods",
+          href: "/account/payment-methods",
+          icon: <ShoppingBag className="h-5 w-5" />,
+          active: pathname === "/account/payment-methods"
         },
         {
           name: "My Earnings",

@@ -7,12 +7,22 @@ import { BrandGrid } from "@/components/brands/brand-grid"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
 
+interface Brand {
+  id: string;
+  name: string;
+  description?: string;
+  genres?: string[];
+  isApproved?: boolean;
+  isHidden?: boolean;
+  isDeleted?: boolean;
+}
+
 export default function ExplorePage() {
   const { getAllBrands } = useAuth()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedGenre, setSelectedGenre] = useState("all")
 
-  const brands = getAllBrands()
+  const brands = getAllBrands() as Brand[]
   const genres = Array.from(new Set(brands.flatMap(brand => brand.genres || [])))
 
   // Filter brands based on search and genre
@@ -20,7 +30,8 @@ export default function ExplorePage() {
     const matchesSearch = brand.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          brand.description?.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesGenre = selectedGenre === "all" || brand.genres?.includes(selectedGenre)
-    return matchesSearch && matchesGenre
+    const isVisible = !brand.isHidden && !brand.isDeleted && brand.isApproved
+    return matchesSearch && matchesGenre && isVisible
   })
 
   return (

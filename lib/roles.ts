@@ -7,9 +7,9 @@ export const USER_ROLES = {
 export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES]
 
 export const ROLE_LABELS = {
-  [USER_ROLES.USER]: "User",
-  [USER_ROLES.PLATFORM_ADMIN]: "Platform Admin",
-  [USER_ROLES.SUPER_ADMIN]: "Super Admin"
+  [USER_ROLES.USER]: "user",
+  [USER_ROLES.PLATFORM_ADMIN]: "platformAdmin",
+  [USER_ROLES.SUPER_ADMIN]: "superAdmin"
 } as const
 
 export const ROLE_DESCRIPTIONS = {

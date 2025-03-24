@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card } from "@/components/ui/card"
-import { toast } from "@/components/ui/use-toast"
+import { Button } from "../components/ui/button"
+import { Input } from "../components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
+import { Card } from "../components/ui/card"
+import { toast } from "../components/ui/use-toast"
 import { Link as LinkIcon, Upload, ImageIcon, X, AlertCircle } from "lucide-react"
 import Image from "next/image"
 
@@ -50,6 +50,7 @@ export function ImageUpload({
   }
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault() // Prevent form submission
     const file = e.target.files?.[0]
     if (!file) return
     
@@ -68,6 +69,7 @@ export function ImageUpload({
   }
   
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault() // Prevent form submission
     const url = e.target.value
     setImageUrl(url)
     
@@ -113,6 +115,11 @@ export function ImageUpload({
               accept="image/png, image/jpeg, image/webp, image/gif"
               onChange={handleFileChange}
               className="cursor-pointer"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault() // Prevent form submission on Enter key
+                }
+              }}
             />
             <p className="text-xs text-muted-foreground">
               Accepted formats: JPEG, PNG, WebP, GIF. Max size: {maxSizeMB}MB
@@ -127,6 +134,11 @@ export function ImageUpload({
               placeholder="https://example.com/image.jpg"
               value={imageUrl}
               onChange={handleUrlChange}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault() // Prevent form submission on Enter key
+                }
+              }}
             />
             <p className="text-xs text-muted-foreground">
               Enter a direct link to an image (must end with .jpg, .png, .webp, or .gif)
