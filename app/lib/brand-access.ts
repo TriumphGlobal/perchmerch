@@ -1,61 +1,79 @@
-import { auth } from "@clerk/nextjs/server"
+import { auth, currentUser } from "@clerk/nextjs/server"
 import { db } from "@/lib/db"
-import { cache } from "react"
 
-// Cache the user data for 5 seconds to prevent multiple slow loads
-const getCachedUser = cache(async (userId: string) => {
-  return await db.user.findUnique({
-    where: { id: userId },
-    include: {
-      brandAccess: {
-        include: {
-          brand: true
-        }
-      }
-    },
-  })
-})
+type UserWithBrandAccess = {
+  id: string
+  email: string
+  role: string
+  brandAccess: Array<{
+    id: string
+    brandId: string
+    role: string
+    brand: {
+      id: string
+      brandId: string
+      name: string
+      [key: string]: any
+    }
+  }>
+}
+
+type BrandWithAccess = {
+  id: string
+  brandId: string
+  name: string
+  isApproved: boolean
+  isHidden: boolean
+  access: Array<{
+    id: string
+    brandId: string
+    role: string
+    user: {
+      id: string
+      email: string
+      name: string | null
+    }
+  }>,
+  _count: {
+    products: number
+  }
+  [key: string]: any
+}
 
 export type BrandAccessResult = {
   isAuthorized: boolean
-  brand: any | null
-  user: any | null
+  brand: BrandWithAccess | null
+  user: UserWithBrandAccess | null
   error?: string
   status?: number
 }
 
-export async function checkBrandAccess(brandId: string, userEmail?: string): Promise<BrandAccessResult> {
+export async function checkBrandAccess(brandId: string): Promise<BrandAccessResult> {
   try {
-    let dbUser = null;
+    const clerkUser = await currentUser()
+    if (!clerkUser?.emailAddresses?.[0]?.emailAddress) {
+      return {
+        isAuthorized: false,
+        brand: null,
+        user: null,
+        error: "Unauthorized",
+        status: 401
+      }
+    }
 
-    // Try to get user from email first if provided
-    if (userEmail) {
-      dbUser = await db.user.findUnique({
-        where: { email: userEmail },
-        include: {
-          brandAccess: {
-            include: {
-              brand: true
-            }
+    const userEmail = clerkUser.emailAddresses[0].emailAddress
+
+    // Get the user with brand access
+    const dbUser = await db.user.findUnique({
+      where: { email: userEmail },
+      include: {
+        brandAccess: {
+          include: {
+            brand: true
           }
         }
-      });
-    } 
-    
-    // If no email provided or user not found by email, try Clerk auth
-    if (!dbUser) {
-      const { userId } = await auth();
-      if (!userId) {
-        return {
-          isAuthorized: false,
-          brand: null,
-          user: null,
-          error: "Unauthorized",
-          status: 401
-        };
       }
-      dbUser = await getCachedUser(userId);
-    }
+    }) as UserWithBrandAccess | null
 
     if (!dbUser) {
       return {
@@ -64,16 +82,13 @@ export async function checkBrandAccess(brandId: string, userEmail?: string): Pro
         user: null,
         error: "User not found",
         status: 404
-      };
+      }
     }
 
-    // Get the brand with access info
+    // Get the brand using the user-friendly brandId
     const brand = await db.brand.findFirst({
       where: {
-        OR: [
-          { id: brandId },
-          { brandId: brandId }
-        ],
+        brandId: brandId,
         isDeleted: false
       },
       include: {
@@ -94,39 +109,54 @@ export async function checkBrandAccess(brandId: string, userEmail?: string): Pro
           }
         }
       }
-    });
+    }) as BrandWithAccess | null
 
     if (!brand) {
+      console.log("[BRAND_ACCESS] Brand not found:", {
+        brandId,
+        userEmail
+      })
       return {
         isAuthorized: false,
         brand: null,
         user: dbUser,
         error: "Brand not found",
         status: 404
-      };
+      }
     }
 
-    // Check access
-    const userAccess = brand.access.find(access => access.user.email === (userEmail || dbUser.email));
-    const isOwner = userAccess?.role === "owner";
-    const isManager = userAccess?.role === "manager";
-    const isAdmin = dbUser.role === "platformModerator" || dbUser.role === "superAdmin";
+    // Check access using brandId
+    const userAccess = dbUser.brandAccess.find((access) => access.brandId === brandId)
+    const isOwner = userAccess?.role === "owner"
+    const isManager = userAccess?.role === "manager"
+    const isAdmin = dbUser.role === "platformModerator" || dbUser.role === "superAdmin"
 
     console.log("[BRAND_ACCESS] Check:", {
-      brandId: brand.id,
-      userEmail: userEmail || dbUser.email,
+      brandId: brand.brandId,
+      userEmail,
       isOwner,
       isManager,
       isAdmin,
-      userRole: dbUser.role
-    });
+      userRole: dbUser.role,
+      brandAccess: brand.access,
+      userAccess
+    })
 
+    // Allow access if:
+    // 1. User is an owner or manager of the brand - regardless of brand status
+    // 2. User is a platform moderator or super admin - regardless of brand status
+    // 3. Brand is approved and not hidden (for public access)
     if (isOwner || isManager || isAdmin) {
+      console.log("[BRAND_ACCESS] Access granted:", {
+        isOwner,
+        isManager,
+        isAdmin
+      })
       return {
         isAuthorized: true,
         brand,
         user: dbUser
-      };
+      }
     }
 
     // For non-owners/managers/admins, only allow access if brand is approved and not hidden
@@ -135,7 +165,7 @@ export async function checkBrandAccess(brandId: string, userEmail?: string): Pro
         isAuthorized: true,
         brand,
         user: dbUser
-      };
+      }
     }
 
     return {
@@ -144,15 +174,15 @@ export async function checkBrandAccess(brandId: string, userEmail?: string): Pro
       user: dbUser,
       error: "Access denied",
       status: 403
-    };
+    }
   } catch (error) {
-    console.error("[BRAND_ACCESS]", error);
+    console.error("[BRAND_ACCESS]", error)
     return {
       isAuthorized: false,
       brand: null,
       user: null,
       error: "Internal server error",
       status: 500
-    };
+    }
   }
 } 

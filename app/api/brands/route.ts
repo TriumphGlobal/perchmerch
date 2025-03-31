@@ -56,46 +56,72 @@ export async function GET(req: Request) {
     const userEmail = clerkUser.emailAddresses[0].emailAddress
     const { searchParams } = new URL(req.url)
     const queryEmail = searchParams.get("userEmail")
+    const queryBrandId = searchParams.get("brandId")
 
-    // Get user from database with brand access
+    console.log("[BRANDS_API] Request:", {
+      userEmail,
+      queryEmail,
+      queryBrandId
+    })
+
+    // First get the user's brands with access info
     const user = await db.user.findFirst({
       where: {
         email: queryEmail || userEmail
       },
       include: {
-        brandAccess: {
-          include: {
-            brand: {
-              include: {
-                access: {
-                  include: {
-                    user: {
-                      select: {
-                        id: true,
-                        email: true,
-                        name: true
-                      }
-                    }
-                  }
-                },
-                _count: {
-                  select: {
-                    products: true
-                  }
-                }
-              }
-            }
-          }
-        }
+        brandAccess: true
       }
-    }) as UserWithBrands | null
+    })
 
     if (!user) {
+      console.log("[BRANDS_API] User not found:", { userEmail, queryEmail })
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // For superAdmin, return all brands
+    console.log("[BRANDS_API] User found:", {
+      email: user.email,
+      role: user.role,
+      brandAccessCount: user.brandAccess.length
+    })
+
+    // For superAdmin, return all brands or specific brand
     if (user.role === "superAdmin") {
+      if (queryBrandId) {
+        const brand = await db.brand.findFirst({
+          where: {
+            OR: [
+              { id: queryBrandId },
+              { brandId: queryBrandId }
+            ],
+            deletedAt: null
+          },
+          include: {
+            access: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    name: true
+                  }
+                }
+              }
+            },
+            _count: {
+              select: {
+                products: true
+              }
+            }
+          }
+        })
+        console.log("[BRANDS_API] SuperAdmin brand query result:", {
+          queryBrandId,
+          found: !!brand
+        })
+        return NextResponse.json({ brands: brand ? [brand] : [] })
+      }
+
       const brands = await db.brand.findMany({
         where: {
           deletedAt: null
@@ -125,15 +151,62 @@ export async function GET(req: Request) {
       return NextResponse.json({ brands })
     }
 
-    // For regular users, return their brands through brandAccess
-    const brands = user.brandAccess
-      .map(access => access.brand)
-      .filter(brand => !brand.deletedAt)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    // For regular users, fetch their accessible brands with full data
+    const brands = await db.brand.findMany({
+      where: {
+        AND: [
+          { deletedAt: null },
+          queryBrandId ? {
+            OR: [
+              { id: queryBrandId },
+              { brandId: queryBrandId }
+            ]
+          } : {},
+          {
+            access: {
+              some: {
+                userId: user.id
+              }
+            }
+          }
+        ]
+      },
+      include: {
+        access: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            products: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc' as const
+      }
+    })
+
+    console.log("[BRANDS_API] Regular user brands:", {
+      queryBrandId,
+      foundCount: brands.length,
+      brandIds: brands.map(b => ({
+        id: b.id,
+        brandId: b.brandId,
+        name: b.name
+      }))
+    })
 
     return NextResponse.json({ brands })
   } catch (error) {
-    console.error("[BRANDS]", error)
+    console.error("[BRANDS_API] Error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -176,61 +249,88 @@ export async function POST(req: Request) {
     // Generate brandId from name if not provided
     const brandId = body.brandId || body.name.toLowerCase().replace(/[^a-zA-Z0-9]/g, '')
 
-    // Create brand with all relationships in a single transaction
-    const brand = await db.brand.create({
-      data: {
-        name: body.name,
-        brandId: brandId,
-        description: body.description || null,
-        tagline: body.tagline || null,
-        imageUrl: body.imageUrl || null,
-        colors: body.colors || [],
-        website: body.website || null,
-        facebook: body.facebook || null,
-        twitter: body.twitter || null,
-        telegram: body.telegram || null,
-        customLink1: body.customLink1 || null,
-        customLink2: body.customLink2 || null,
-        customLink3: body.customLink3 || null,
-        isApproved: false,
-        isHidden: true,
-        lastModifiedByEmail: dbUser.email,
-        lastModifiedAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        genres: body.genres ? {
-          connect: body.genres.map(genreId => ({ id: genreId }))
-        } : undefined,
-        // Create brand access for owner
-        access: {
-          create: {
-            userId: dbUser.id,
-            role: "owner"
+    // Create brand and brandAccess in a transaction to ensure consistency
+    const result = await db.$transaction(async (tx) => {
+      // First create the brand
+      const brand = await tx.brand.create({
+        data: {
+          name: body.name,
+          brandId: brandId,
+          description: body.description || null,
+          tagline: body.tagline || null,
+          imageUrl: body.imageUrl || null,
+          colors: body.colors || [],
+          website: body.website || null,
+          facebook: body.facebook || null,
+          twitter: body.twitter || null,
+          telegram: body.telegram || null,
+          customLink1: body.customLink1 || null,
+          customLink2: body.customLink2 || null,
+          customLink3: body.customLink3 || null,
+          isApproved: false,
+          isHidden: true,
+          lastModifiedByEmail: dbUser.email,
+          lastModifiedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          genres: body.genres ? {
+            connect: body.genres.map(genreId => ({ id: genreId }))
+          } : undefined
+        }
+      })
+
+      console.log("[BRANDS_API] Created brand:", {
+        id: brand.id,
+        brandId: brand.brandId,
+        name: brand.name
+      })
+
+      // Create brand access separately to ensure proper relationship
+      const access = await tx.brandAccess.create({
+        data: {
+          userId: dbUser.id,
+          brandId: brandId, // Use the brandId field that matches the schema relation
+          role: "owner"
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true
+            }
           }
         }
-      },
-      include: {
-        access: true,
-        genres: true
-      }
-    })
+      })
 
-    // Create activity log
-    await db.userActivity.create({
-      data: {
-        userEmail: dbUser.email,
-        type: "BRAND_CREATE",
-        details: JSON.stringify({
-          brandId: brand.id,
-          brandName: brand.name
-        })
+      console.log("[BRANDS_API] Created brand access:", {
+        userId: dbUser.id,
+        brandId: brandId,
+        role: "owner"
+      })
+
+      // Create activity log
+      await tx.userActivity.create({
+        data: {
+          userEmail: dbUser.email,
+          type: "BRAND_CREATE",
+          details: JSON.stringify({
+            brandId: brand.brandId,
+            brandName: brand.name
+          })
+        }
+      })
+
+      return {
+        ...brand,
+        access: [access]
       }
     })
 
     return NextResponse.json({
       success: true,
       brand: {
-        ...brand,
+        ...result,
         isApproved: false,
         isHidden: true
       }

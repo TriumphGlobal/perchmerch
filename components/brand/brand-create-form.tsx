@@ -174,8 +174,13 @@ export default function BrandCreateForm({ user }: BrandCreateFormProps) {
         data.twitter.startsWith('http') ? data.twitter : `https://twitter.com/${data.twitter}`
       ) : null
 
+      // Generate brandId from name if not provided
+      const brandId = data.brandId || data.name.toLowerCase().replace(/[^a-zA-Z0-9]/g, '')
+
       const brandData = {
         ...data,
+        // Ensure brandId is set
+        brandId,
         // Ensure social media fields are properly formatted
         website: data.website || null,
         facebook: data.facebook || null,
@@ -189,26 +194,32 @@ export default function BrandCreateForm({ user }: BrandCreateFormProps) {
       const response = await fetch("/api/brands", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "user-email": user.email // Add user email to headers for authentication
         },
         body: JSON.stringify(brandData)
       })
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.message || "Failed to create brand")
+        throw new Error(error.error || error.message || "Failed to create brand")
       }
 
       const result = await response.json()
+
+      if (!result.success || !result.brand) {
+        throw new Error("Failed to create brand - no brand data returned")
+      }
 
       toast({
         title: "Success!",
         description: "Your brand has been created and is pending approval."
       })
 
+      // Use the brandId from the response for navigation
       router.push(`/brands/manage/${result.brand.brandId}`)
     } catch (error) {
-      console.error("Error creating brand:", error)
+      console.error("[BRAND_CREATE_FORM] Error:", error)
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to create brand",

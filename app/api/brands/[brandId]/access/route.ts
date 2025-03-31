@@ -22,7 +22,7 @@ export async function GET(
     }
 
     const access = await db.brandAccess.findMany({
-      where: { brandId: result.brand.id },
+      where: { brandId: result.brand.brandId },
       include: {
         user: {
           select: {
@@ -96,7 +96,7 @@ export async function POST(
       where: {
         userId_brandId: {
           userId: user.id,
-          brandId: result.brand.id
+          brandId: result.brand.brandId
         }
       }
     })
@@ -113,7 +113,7 @@ export async function POST(
       data: {
         role: body.role,
         userId: user.id,
-        brandId: result.brand.id
+        brandId: result.brand.brandId
       },
       include: {
         user: {
@@ -193,7 +193,7 @@ export async function DELETE(
       where: {
         userId_brandId: {
           userId: userToRemove.id,
-          brandId: result.brand.id
+          brandId: result.brand.brandId
         }
       }
     })
@@ -218,7 +218,7 @@ export async function DELETE(
       where: {
         userId_brandId: {
           userId: userToRemove.id,
-          brandId: result.brand.id
+          brandId: result.brand.brandId
         }
       }
     })

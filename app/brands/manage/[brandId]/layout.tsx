@@ -12,12 +12,17 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 interface Brand {
   id: string
   name: string
-  owner: {
+  brandId: string
+  imageUrl?: string | null
+  access: Array<{
     id: string
-  }
-  managers: {
-    id: string
-  }[]
+    role: string
+    user: {
+      id: string
+      email: string
+      name: string | null
+    }
+  }>
 }
 
 interface LayoutProps {
@@ -29,7 +34,7 @@ interface LayoutProps {
 
 export default function Layout({ children, params }: LayoutProps) {
   const router = useRouter()
-  const { isLoaded, isSignedIn, getToken } = usePerchAuth()
+  const { isLoaded, isSignedIn, clerkUser } = usePerchAuth()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [brand, setBrand] = useState<Brand | null>(null)
@@ -38,19 +43,17 @@ export default function Layout({ children, params }: LayoutProps) {
     const checkAccess = async () => {
       try {
         if (!isLoaded) return
-        if (!isSignedIn) {
+        if (!isSignedIn || !clerkUser?.emailAddresses?.[0]?.emailAddress) {
           router.push("/sign-in")
           return
         }
 
-        const token = await getToken()
-        if (!token) {
-          setError("Authentication required")
-          return
-        }
+        const userEmail = clerkUser.emailAddresses[0].emailAddress
 
         const response = await fetch(`/api/brands/${params.brandId}`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { 
+            "user-email": userEmail
+          }
         })
 
         if (!response.ok) {
@@ -75,7 +78,7 @@ export default function Layout({ children, params }: LayoutProps) {
     }
 
     checkAccess()
-  }, [isLoaded, isSignedIn, params.brandId, router, getToken])
+  }, [isLoaded, isSignedIn, params.brandId, router, clerkUser])
 
   if (!isLoaded || isLoading) {
     return (

@@ -319,7 +319,7 @@ model PaymentMethod {
 model BrandAccess {
   id        String   @id @default(cuid())
   brandId   String
-  brand     Brand    @relation(fields: [brandId], references: [id])
+  brand     Brand    @relation(fields: [brandId], references: [brandId], onDelete: Cascade)
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   role      String   // "owner" or "manager"
